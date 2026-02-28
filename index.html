@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SRG DASHBOARD // CUBESAT MISSION CONTROL</title>
+<link rel="icon" type="image/png" href="CubeSat.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<canvas id="sf"></canvas>
+<div class="scanlines"></div>
+<div class="vignette"></div>
+
+<!-- ════════ LOGIN (full page) ════════ -->
+<div id="login">
+  <div class="login-grid">
+    <svg viewBox="0 0 1440 900" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="g1" width="36" height="36" patternUnits="userSpaceOnUse">
+          <path d="M36 0L0 0 0 36" fill="none" stroke="#00d4ff" stroke-width=".25"/>
+        </pattern>
+        <pattern id="g2" width="48" height="48" patternUnits="userSpaceOnUse">
+          <path d="M0 48L48 0" fill="none" stroke="#ffb300" stroke-width=".2"/>
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#g1)"/>
+      <rect width="100%" height="100%" fill="url(#g2)" opacity=".5"/>
+      <ellipse cx="720" cy="450" rx="280" ry="180" fill="none" stroke="#00d4ff" stroke-width=".4" opacity=".4"/>
+      <ellipse cx="720" cy="450" rx="480" ry="320" fill="none" stroke="#ffb300" stroke-width=".25" opacity=".25"/>
+      <ellipse cx="720" cy="450" rx="140" ry="90" fill="none" stroke="#ff1744" stroke-width=".3" opacity=".3"/>
+      <ellipse cx="720" cy="450" rx="380" ry="240" fill="none" stroke="#ffd740" stroke-width=".2" opacity=".15"/>
+      <line x1="720" y1="0" x2="720" y2="900" stroke="#00d4ff" stroke-width=".25" opacity=".18"/>
+      <line x1="0" y1="450" x2="1440" y2="450" stroke="#ffb300" stroke-width=".2" opacity=".15"/>
+      <line x1="0" y1="0" x2="1440" y2="900" stroke="#00d4ff" stroke-width=".12" opacity=".08"/>
+      <line x1="1440" y1="0" x2="0" y2="900" stroke="#ffb300" stroke-width=".12" opacity=".08"/>
+    </svg>
+  </div>
+
+  <div class="login-full">
+    <div class="login-left">
+      <div class="login-hdr">AMSAT // GROUND CONTROL TERMINAL — v2.4.1</div>
+      <div class="hero">
+        <pre class="sat-art"> *  .  *  .  *  .  *  .  *
+     _______[===]_______
+ ===| ◉  MISSION CTRL ◉ |===
+     ‾‾‾‾‾‾‾[===]‾‾‾‾‾‾‾
+ .  *  .  |       |  .  *  .</pre>
+        <h1>CUBESAT-SIM</h1>
+        <div class="sub">GROUND CONTROL // CUBESAT TELEMETRY</div>
+      </div>
+      <div id="boot"></div>
+    </div>
+    <div class="login-right">
+      <div class="login-form">
+        <div class="fld">
+          <label class="flbl">Operator Identifier</label>
+          <div class="irow"><span class="prm">›</span><input class="ti" id="uid" type="text" placeholder="KD9XXX" autocomplete="off" spellcheck="false"></div>
+        </div>
+        <div class="fld">
+          <label class="flbl">Access Code</label>
+          <div class="irow"><span class="prm">›</span><input class="ti" id="upw" type="password" placeholder="••••••••" autocomplete="off"></div>
+        </div>
+        <div id="lerr"></div>
+        <button class="lbtn" id="lbtn" onclick="doLogin()">[ AUTHENTICATE // ESTABLISH UPLINK ]</button>
+      </div>
+      <div class="login-ftr">
+        <div><span class="pdot" id="rf-dot"></span> UPLINK 435 MHz · DOWNLINK 434.9 MHz — <span id="rf-status">--</span></div>
+        <div id="lclk">--:--:-- UTC</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ DASHBOARD ════════ -->
+<div id="dash">
+
+  <!-- NAVBAR -->
+  <div class="nb">
+    <div class="nb-left">
+      <div class="nb-missionid">◈ SRG DASHBOARD</div>
+      <div class="nb-meta">
+        <div class="nb-meta-top" id="nb-meta-top">GROUND CONTROL STATION // LIVE TELEMETRY</div>
+        <div class="nb-meta-bot" id="nb-op">OPERATOR: --- // ROLE: ---</div>
+      </div>
+    </div>
+    <div class="nb-right">
+      <div class="met-strip">
+        <div class="met-item"><span class="met-v" id="met-h">00</span><span class="met-l">HRS</span></div>
+        <div class="met-sep">:</div>
+        <div class="met-item"><span class="met-v" id="met-m">00</span><span class="met-l">MIN</span></div>
+        <div class="met-sep">:</div>
+        <div class="met-item"><span class="met-v" id="met-s">00</span><span class="met-l">SEC</span></div>
+      </div>
+      <div class="nb-div"></div>
+      <div class="nstat"><span class="nv" id="nv-frm">0</span><span class="nl">FRAMES RX</span></div>
+      <div class="nstat"><span class="nv">435</span><span class="nl">↑ MHz</span></div>
+      <div class="nstat"><span class="nv">434.9</span><span class="nl">↓ MHz</span></div>
+      <div class="nb-div"></div>
+      <div class="nusr">
+        <span class="uico">◉</span>
+        <div><div class="unm" id="nu-name">---</div><div class="url2" id="nu-role">---</div></div>
+        <span id="nu-badge" class="badge-g">GUEST</span>
+      </div>
+      <button class="nbtn pri" id="admin-btn" onclick="openAdmin()" style="display:none">⚙ ADMIN</button>
+      <button class="nbtn" onclick="doLogout()">LOGOUT</button>
+    </div>
+  </div>
+
+  <!-- CUBESAT VIEW: left 2-row sensors | center telemetry log | right IMU -->
+  <div class="mgrid" id="view-cubesat">
+
+    <!-- LEFT TOP: MS5611 Barometric -->
+    <div class="pnl" style="grid-column:1;grid-row:1">
+      <div class="hud-tl"></div><div class="hud-tr"></div><div class="hud-bl"></div><div class="hud-br"></div>
+      <div class="pt"><span class="status-led"></span> MS5611 <span class="chip">BAROMETRIC</span></div>
+
+      <div class="bv" id="ms-t">--.-</div>
+      <div style="display:flex;align-items:baseline;gap:4px;margin-top:1px">
+        <span class="bu">°C</span>
+        <span style="font-size:9px;letter-spacing:1px;color:rgba(255,179,0,.7);margin-left:6px" id="ms-tf">-- °F</span>
+      </div>
+      <div class="bl">TEMPERATURE</div>
+      <div class="gb" style="margin:3px 0 7px"><div class="gf" id="gf-t" style="width:50%"></div></div>
+
+      <div class="sr"><span class="sl">PRESSURE</span><span class="sv cy" id="ms-p">---- hPa</span></div>
+      <div class="gb"><div class="gf cy" id="gf-p" style="width:50%"></div></div>
+
+      <div class="sr" style="margin-top:3px"><span class="sl">ALT (BARO)</span><span class="sv" id="ms-a">--.-- m</span></div>
+      <div class="gb"><div class="gf" id="gf-a" style="width:50%"></div></div>
+
+      <div class="sr" style="margin-top:5px"><span class="sl">TEMP STATUS</span><span class="sv gn" id="st-t">NOMINAL</span></div>
+      <div class="sr"><span class="sl">PRESS STATUS</span><span class="sv gn" id="st-p">NOMINAL</span></div>
+
+      <div class="spwrap">
+        <div class="splbl">TEMPERATURE — 60 SAMPLES</div>
+        <canvas class="sp" id="sp-t" height="32"></canvas>
+      </div>
+    </div>
+
+    <!-- LEFT BOTTOM: TMP Diode -->
+    <div class="pnl" style="grid-column:1;grid-row:2">
+      <div class="hud-tl"></div><div class="hud-tr"></div><div class="hud-bl"></div><div class="hud-br"></div>
+      <div class="pt"><span class="status-led"></span> THERMAL <span class="chip">DIODE D3</span></div>
+
+      <div class="bv cy" id="tmp-v">--.-</div>
+      <div style="display:flex;align-items:baseline;gap:4px;margin-top:1px">
+        <span class="bu">°C</span>
+        <span style="font-size:9px;letter-spacing:1px;color:rgba(255,179,0,.7);margin-left:6px" id="tmp-tf">-- °F</span>
+      </div>
+      <div class="bl">BOARD TEMPERATURE (TMP)</div>
+      <div class="gb" style="margin:3px 0 7px"><div class="gf cy" id="gf-tmp" style="width:50%"></div></div>
+
+      <div class="sr"><span class="sl">Δ MS5611 − TMP</span><span class="sv" id="dt">-- °C</span></div>
+      <div class="sr"><span class="sl">BOARD HEALTH</span><span class="sv gn" id="st-b">NOMINAL ✓</span></div>
+      <div class="sr"><span class="sl">DIODE STATUS</span><span class="sv gn" id="st-d">OPERATIONAL</span></div>
+
+      <div style="margin-top:8px;padding-top:7px;border-top:1px solid rgba(0,212,255,.08)">
+        <div class="sr"><span class="sl">PACKET #</span><span class="sv" id="pkt-n">0</span></div>
+        <div class="sr"><span class="sl">RF SIGNAL</span><span class="sv gn" id="rf-s">▮▮▮▯▯</span></div>
+        <div class="sr"><span class="sl">SAT ID</span><span class="sv">KD9SAT-11</span></div>
+        <div class="sr"><span class="sl">PROTOCOL</span><span class="sv cy">APRS / AFSK 1200Bd</span></div>
+      </div>
+
+      <div class="spwrap">
+        <div class="splbl">DIODE TEMP — 60 SAMPLES</div>
+        <canvas class="sp" id="sp-tmp" height="32"></canvas>
+      </div>
+    </div>
+
+    <!-- CENTER: Telemetry Log (spans rows 1-2) -->
+    <div class="pnl" style="grid-column:2;grid-row:1/3;display:flex;flex-direction:column">
+      <div class="hud-tl"></div><div class="hud-tr"></div><div class="hud-bl"></div><div class="hud-br"></div>
+      <div class="pt"><span class="status-led"></span> APRS TELEMETRY <span class="chip">LIVE STREAM</span></div>
+      <div class="tlog" id="tlog"></div>
+    </div>
+
+    <!-- RIGHT: MPU6050 IMU (spans rows 1-2) -->
+    <div class="pnl" style="grid-column:3;grid-row:1/3">
+      <div class="hud-tl"></div><div class="hud-tr"></div><div class="hud-bl"></div><div class="hud-br"></div>
+      <div class="pt"><span class="status-led"></span> MPU6050 <span class="chip">IMU</span></div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:8px;letter-spacing:2px;color:var(--white-dd);margin-bottom:3px">GYROSCOPE — deg/s</div>
+      <div class="imgrid">
+        <div class="icell"><div class="ic-l">GX</div><div class="ic-v" id="ic-gx">-.-<span class="icu"> °/s</span></div></div>
+        <div class="icell"><div class="ic-l">GY</div><div class="ic-v" id="ic-gy">-.-<span class="icu"> °/s</span></div></div>
+        <div class="icell"><div class="ic-l">GZ</div><div class="ic-v" id="ic-gz">-.-<span class="icu"> °/s</span></div></div>
+        <div class="icell"><div class="ic-l">|G| MAG</div><div class="ic-v" id="ic-gm">-.-<span class="icu"> °/s</span></div></div>
+      </div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:8px;letter-spacing:2px;color:var(--white-dd);margin:8px 0 3px">ACCELEROMETER — g</div>
+      <div class="imgrid">
+        <div class="icell"><div class="ic-l">AX</div><div class="ic-v gn" id="ic-ax">-.-<span class="icu"> g</span></div></div>
+        <div class="icell"><div class="ic-l">AY</div><div class="ic-v gn" id="ic-ay">-.-<span class="icu"> g</span></div></div>
+        <div class="icell"><div class="ic-l">AZ</div><div class="ic-v gn" id="ic-az">-.-<span class="icu"> g</span></div></div>
+        <div class="icell"><div class="ic-l">|A| MAG</div><div class="ic-v gn" id="ic-am">-.-<span class="icu"> g</span></div></div>
+      </div>
+      <div class="spwrap">
+        <div class="splbl">ACCEL MAGNITUDE — 60 SAMPLES</div>
+        <canvas class="sp" id="sp-a" height="28"></canvas>
+      </div>
+    </div>
+
+    <!-- ROW 3: SYS strip — CPU · Battery · Gyro (spans full width) -->
+    <div class="sys-strip" style="grid-column:1/-1;grid-row:3;display:flex;gap:4px;flex-wrap:wrap">
+      <div class="pnl pnl-sys pnl-gold" style="flex:1;min-width:140px">
+        <div class="hud-tl"></div><div class="hud-tr"></div><div class="hud-bl"></div><div class="hud-br"></div>
+        <div class="pt"><span class="status-led"></span> CPU <span class="chip">USAGE</span></div>
+        <div class="bv yw" id="cpu-v">--</div>
+        <span class="bu">%</span>
+        <div class="bl">SATELLITE PROCESSOR</div>
+        <div class="gb" style="margin:3px 0 7px"><div class="gf yw" id="gf-cpu" style="width:0%"></div></div>
+      </div>
+      <div class="pnl pnl-sys pnl-gold" style="flex:1;min-width:140px">
+        <div class="hud-tl"></div><div class="hud-tr"></div><div class="hud-bl"></div><div class="hud-br"></div>
+        <div class="pt"><span class="status-led"></span> BATTERY <span class="chip">VOLTAGE</span></div>
+        <div class="bv yw" id="bat-v">--.--</div>
+        <span class="bu">V</span>
+        <div class="bl">SAT BUS POWER</div>
+        <div class="gb" style="margin:3px 0 7px"><div class="gf yw" id="gf-bat" style="width:50%"></div></div>
+        <div class="sr" style="margin-top:4px"><span class="sl">STATUS</span><span class="sv" id="bat-st">----</span></div>
+      </div>
+      <div class="pnl pnl-sys pnl-gyro" style="flex:1;min-width:200px">
+        <div class="hud-tl"></div><div class="hud-tr"></div><div class="hud-bl"></div><div class="hud-br"></div>
+        <div class="pt"><span class="status-led"></span> GYROSCOPE <span class="chip">RATE</span></div>
+        <div class="gyro-strip">
+          <div class="gyro-item"><span class="gyro-l">GX</span><span class="gyro-v" id="gyro-gx">-.-</span></div>
+          <div class="gyro-item"><span class="gyro-l">GY</span><span class="gyro-v" id="gyro-gy">-.-</span></div>
+          <div class="gyro-item"><span class="gyro-l">GZ</span><span class="gyro-v" id="gyro-gz">-.-</span></div>
+          <div class="gyro-item"><span class="gyro-l">|G|</span><span class="gyro-v yw" id="gyro-gm">-.-</span></div>
+        </div>
+        <div class="bl" style="margin-top:4px">deg/s — MPU6050</div>
+      </div>
+    </div>
+
+  </div><!-- /view-cubesat -->
+
+  <!-- BOTTOM BAR -->
+  <div class="bbar">
+    <div class="rawstr" id="rawstr">RAW › <span>AWAITING DATA...</span></div>
+    <div class="pstat"><span class="pdot"></span> PARSER ACTIVE — 1400ms INTERVAL <span id="data-mode" class="data-mode sim">SIM</span><button class="reconnect-btn" id="reconnect-btn" onclick="tryReconnect()">⟳ RECONNECT</button></div>
+    <div id="dclk" style="color:rgba(0,212,255,.5);font-size:9px;letter-spacing:1px;font-family:'Barlow Condensed',sans-serif;font-weight:600">--:--:-- UTC</div>
+  </div>
+
+</div>
+
+<!-- ════════ ADMIN MODAL ════════ -->
+<div id="admin">
+  <div class="mbox">
+    <div class="mhdr">
+      <h2>⚙ ADMIN // USER MANAGEMENT</h2>
+      <button class="mclose" onclick="closeAdmin()">✕</button>
+    </div>
+    <div class="mbody">
+      <div class="tabs">
+        <button class="tb act" onclick="stab(event,'tp-u')">USER ACCOUNTS</button>
+        <button class="tb" onclick="stab(event,'tp-a')">ADD USER</button>
+      </div>
+      <div class="tpane act" id="tp-u">
+        <table class="utbl">
+          <thead><tr><th>CALLSIGN / ID</th><th>ROLE</th><th>CREATED</th><th>ACTION</th></tr></thead>
+          <tbody id="utbody"></tbody>
+        </table>
+      </div>
+      <div class="tpane" id="tp-a">
+        <div class="aform">
+          <div class="fgrid">
+            <div class="ff"><label>Callsign / Username</label><input type="text" id="nu-u" placeholder="KD9XXX" autocomplete="off" spellcheck="false"></div>
+            <div class="ff"><label>Role</label><select id="nu-r"><option value="guest">GUEST</option><option value="admin">ADMIN</option></select></div>
+            <div class="ff"><label>Password</label><input type="password" id="nu-p" placeholder="min 6 characters" autocomplete="off"></div>
+            <div class="ff"><label>Confirm Password</label><input type="password" id="nu-p2" placeholder="repeat password" autocomplete="off"></div>
+          </div>
+          <div class="ferr" id="aerr"></div>
+          <button class="addbtn" onclick="addUser()">[ + CREATE ACCOUNT ]</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Preloaded sound effects for connection status -->
+<audio id="snd-connection-failed" preload="auto"><source src="Sound Effects/Connection Failed.mp3" type="audio/mpeg"></audio>
+<audio id="snd-connected" preload="auto"><source src="Sound Effects/Connected.mp3" type="audio/mpeg"></audio>
+
+<!-- Dashboard pulls telemetry from Adafruit IO only (push_to_aio.py on CubeSat) -->
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
