@@ -117,12 +117,6 @@ body::before {
   50% { box-shadow: 0 0 14px var(--cyan), 0 0 4px rgba(0,212,255,.5); }
   100% { box-shadow: 0 0 8px var(--cyan); }
 }
-@keyframes dash-scan {
-  0%, 100% { top: 0; opacity: 0; }
-  10% { opacity: .4; }
-  90% { opacity: .4; }
-  100% { top: 100%; opacity: 0; }
-}
 @keyframes dash-appear {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
@@ -195,19 +189,6 @@ body::before {
 @keyframes login-appear {
   from { opacity:0; transform:scale(.98); }
   to { opacity:1; transform:scale(1); }
-}
-
-/* Login scan line sweep */
-#login::after {
-  content:''; position:absolute; left:0; right:0; top:0; height:2px;
-  background: linear-gradient(90deg, transparent, var(--cyan), var(--gold), var(--cyan), transparent);
-  box-shadow: 0 0 20px var(--cyan), 0 0 40px rgba(0,212,255,.3);
-  animation: login-scan 3s ease-in-out infinite;
-  pointer-events:none; z-index:2;
-}
-@keyframes login-scan {
-  0%, 100% { top:0; opacity:.6; }
-  50% { top:100%; opacity:1; }
 }
 
 .login-left { animation: login-left-in .9s cubic-bezier(.22,1,.36,1) .15s both; }
@@ -379,13 +360,6 @@ input.ti::placeholder { color:rgba(0,212,255,.25); }
 #dash.show { display:flex; }
 #dash.vis { opacity:1; }
 #dash.vis .mgrid { animation: dash-appear .6s cubic-bezier(.22,1,.36,1) forwards; }
-#dash::before {
-  content:''; position:absolute; left:0; right:0; top:0; height:2px;
-  background: linear-gradient(90deg, transparent, var(--cyan), var(--gold), var(--cyan), transparent);
-  box-shadow: 0 0 16px var(--cyan), 0 0 32px rgba(0,212,255,.25);
-  animation: dash-scan 6s ease-in-out infinite;
-  pointer-events:none; z-index:10;
-}
 
 /* ── NAVBAR (HUD strip) ── */
 .nb {
