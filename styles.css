@@ -85,10 +85,6 @@ body::before {
 @keyframes data-flicker {
   0%,100%{opacity:1} 8%{opacity:.88} 12%{opacity:1} 60%{opacity:1} 63%{opacity:.92} 65%{opacity:1}
 }
-@keyframes border-flow {
-  0% { background-position: 0% 50%; }
-  100% { background-position: 200% 50%; }
-}
 @keyframes cursor-blink { 0%,50%{opacity:1} 51%,100%{opacity:0} }
 
 /* Iron Man HUD animations */
@@ -369,13 +365,6 @@ input.ti::placeholder { color:rgba(0,212,255,.25); }
   border:1px solid var(--border);
   border-top:none;
   position:relative;
-}
-.nb::before {
-  content:''; position:absolute; top:0; left:0; right:0; height:2px;
-  background: linear-gradient(90deg, transparent, var(--lime), var(--cyan), var(--gold), var(--magenta), var(--coral), var(--gold), var(--cyan), transparent);
-  background-size:300% 100%;
-  animation: border-flow 10s linear infinite;
-  opacity:.95;
 }
 .nb::after {
   content:''; position:absolute; bottom:-1px; left:0; right:0; height:1px;
@@ -662,13 +651,6 @@ canvas.sp { display:block; width:100%; height:32px; }
   border:1px solid var(--border);
   border-bottom:none;
   position:relative;
-}
-.bbar::after {
-  content:''; position:absolute; bottom:0; left:0; right:0; height:2px;
-  background: linear-gradient(90deg, transparent, var(--lime), var(--cyan), var(--gold), var(--magenta), var(--coral), var(--gold), var(--cyan), transparent);
-  background-size:300% 100%;
-  animation: border-flow 10s linear infinite;
-  opacity:.95;
 }
 .rawstr { font-family:'JetBrains Mono', 'Share Tech Mono', monospace; font-size:10px; color:rgba(0,212,255,.4); }
 .rawstr span { color:var(--cyan); }
