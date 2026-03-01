@@ -66,6 +66,7 @@ fetchUsersFromServer();
 // ═══════════════ DATA SOURCE STATE ═══════════════
 let dataMode = 'sim';  // 'sim', 'live', 'cloud', or 'adafruit'
 let liveFailCount = 0;
+let lastRecordedData = null;  // { timestamp, temp, press, altCalc, tmp, gx, gy, gz, ax, ay, az, cpuUsage, battery }
 const LIVE_FAIL_MAX = 3;
 let connectionSoundPlayed = false;
 
@@ -104,9 +105,9 @@ function playConnectionFailedSound(){
       const a=s.a*(.3+.7*Math.sin(t*s.f));
       ctx.beginPath();
       ctx.arc(s.x*c.width,s.y*c.height,s.r,0,Math.PI*2);
-      if(s.warm) ctx.fillStyle=`rgba(255,179,0,${a*.35})`;
-      else if(s.cyan) ctx.fillStyle=`rgba(0,212,255,${a*.4})`;
-      else ctx.fillStyle=`rgba(0,212,255,${a*.2})`;
+      if(s.warm) ctx.fillStyle=`rgba(255,193,7,${a*.35})`;
+      else if(s.cyan) ctx.fillStyle=`rgba(79,195,247,${a*.45})`;
+      else ctx.fillStyle=`rgba(79,195,247,${a*.25})`;
       ctx.fill();
     });
     t+=.01; requestAnimationFrame(draw);
@@ -332,10 +333,11 @@ async function startDash(){
       }
       playConnectionSound();
       connectionSoundPlayed=true;
+      updateModeIndicator(false);
     } catch(_) {
-      dataMode='sim';
       playConnectionFailedSound();
-      tlog('ADAFRUIT IO UNAVAILABLE — DASHBOARD NOT RUNNING','terr');
+      tlog('ADAFRUIT IO UNAVAILABLE — AWAITING RECONNECT','terr');
+      updateModeIndicator(true);
     }
   } else {
     dataMode='sim';
@@ -356,11 +358,11 @@ function stopDash(){
   const tl=document.getElementById('tlog');if(tl)tl.innerHTML='';
 }
 
-function updateModeIndicator(){
+function updateModeIndicator(offline){
   const el=document.getElementById('data-mode');
   if(!el) return;
   if(dataMode==='sim'){
-    el.className='data-mode sim';  // CSS hides when sim
+    el.className='data-mode sim';
     return;
   }
   if(dataMode==='live'){
@@ -370,8 +372,8 @@ function updateModeIndicator(){
     el.textContent='CLOUD';
     el.className='data-mode cloud';
   } else if(dataMode==='adafruit'){
-    el.textContent='ADAFRUIT';
-    el.className='data-mode cloud';
+    el.textContent=offline?'OFFLINE':'ADAFRUIT';
+    el.className='data-mode '+(offline?'offline':'cloud');
   }
 }
 
@@ -386,7 +388,7 @@ async function tryReconnect(){
       const p=await fetchAdafruitLast('pressure');
       if(tempMeta&&isDataFresh(tempMeta.created_at)&&p!=null&&!isNaN(parseFloat(tempMeta.value))&&!isNaN(parseFloat(p))){
         dataMode='adafruit'; liveFailCount=0;
-        updateModeIndicator();
+        updateModeIndicator(false);
         tlog('ADAFRUIT IO CONNECTED ✓','tok');
         playConnectionSound(); connectionSoundPlayed=true;
         if(btn){btn.classList.remove('trying');btn.textContent='⟳ RECONNECT';}
@@ -397,8 +399,8 @@ async function tryReconnect(){
     }
   }
   playConnectionFailedSound();
-  tlog('ADAFRUIT IO UNAVAILABLE — CONTINUING IN SIMULATION','terr');
-  dataMode='sim'; updateModeIndicator();
+  tlog('ADAFRUIT IO UNAVAILABLE — AWAITING RECONNECT','terr');
+  updateModeIndicator(true);
   if(btn){btn.classList.remove('trying');btn.textContent='⟳ RECONNECT';}
 }
 
@@ -482,8 +484,8 @@ async function tickTel(){
         playConnectionFailedSound();
       }
       if(liveFailCount>=LIVE_FAIL_MAX && dataMode==='adafruit'){
-        dataMode='sim'; connectionSoundPlayed=false; updateModeIndicator();
-        tlog('ADAFRUIT IO LOST — FALLING BACK TO SIMULATION','terr');
+        tlog('ADAFRUIT IO OFFLINE — AWAITING RECONNECT','terr');
+        updateModeIndicator(true);
       }
     }
   }
@@ -551,10 +553,20 @@ async function tickTel(){
   const raw=hasData?`OK MS5611 ${temp} ${press} ${altCalc} MPU6050 ${fmt(gx)} ${fmt(gy)} ${fmt(gz)} ${fmt(ax)} ${fmt(ay)} ${fmt(az)} TMP ${tmp}`:'NO DATA — ADAFRUIT IO OFFLINE';
   document.getElementById('rawstr').innerHTML=`RAW › <span>${raw}</span>`;
 
-  if(hasData){ push(tHist,temp,60); push(tmpHist,tmp,60); if(am!=null) push(aHist,am,60); }
-  drawSpark('sp-t',tHist,'rgba(0,212,255,.9)','rgba(0,212,255,.06)');
-  drawSpark('sp-tmp',tmpHist,'rgba(255,179,0,.85)','rgba(255,179,0,.06)');
-  drawSpark('sp-a',aHist,'rgba(0,212,255,.75)','rgba(0,212,255,.05)');
+  if(hasData){
+    push(tHist,temp,60); push(tmpHist,tmp,60); if(am!=null) push(aHist,am,60);
+    lastRecordedData={
+      timestamp:new Date().toISOString(),
+      temp,press,altCalc,tmp,gx,gy,gz,ax,ay,az,
+      gm,am,cpuUsage:typeof cpuUsage==='number'?cpuUsage:null,
+      battery:typeof battery==='number'?battery:null,
+      packetCount:pkts,frameCount:frames
+    };
+    renderDataLog();
+  }
+  drawSpark('sp-t',tHist,'rgba(79,195,247,.9)','rgba(79,195,247,.06)');
+  drawSpark('sp-tmp',tmpHist,'rgba(255,193,7,.85)','rgba(255,193,7,.06)');
+  drawSpark('sp-a',aHist,'rgba(79,195,247,.75)','rgba(79,195,247,.05)');
 
   if(hasData&&frames%4===0) tlog(`PKT#${pkts} MS5611:[T:${temp}°C P:${press}hPa] MPU:[GY:${fmt(gx)},${fmt(gy)},${fmt(gz)}] TMP:${tmp}°C`,'tok');
   if(hasData&&frames%30===0) tlog('FRAME SYNC OK — APRS CRC VERIFIED','tsys');
@@ -583,7 +595,7 @@ function drawSpark(id,data,stroke,fill){
   const ctx=c.getContext('2d'),w=c.width,h=c.height;
   ctx.clearRect(0,0,w,h);
 
-  ctx.strokeStyle='rgba(0,212,255,.06)';ctx.lineWidth=.5;
+  ctx.strokeStyle='rgba(79,195,247,.06)';ctx.lineWidth=.5;
   for(let y=0;y<h;y+=h/4){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
 
   const mn=Math.min(...data)-.3,mx=Math.max(...data)+.3,rng=mx-mn||1;
@@ -610,6 +622,79 @@ function drawSpark(id,data,stroke,fill){
   const lastY=h-((data[data.length-1]-mn)/rng)*(h*.86)-h*.07;
   ctx.beginPath();ctx.arc(lastX,lastY,2.5*dpr,0,Math.PI*2);
   ctx.fillStyle=stroke;ctx.fill();
+}
+
+function renderDataLog(){
+  const el=document.getElementById('datalog-content');
+  if(!el)return;
+  if(!lastRecordedData){
+    el.innerHTML='<div class="datalog-empty">No telemetry recorded yet. Data will appear when connected to Adafruit IO.</div>';
+    return;
+  }
+  const d=lastRecordedData;
+  const ts=new Date(d.timestamp);
+  const dateStr=ts.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const timeStr=ts.toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'})+' UTC';
+  const fmt=(v)=>v!=null&&typeof v==='number'?v.toFixed(2):'--.--';
+  el.innerHTML=`
+    <div class="datalog-header">
+      <div class="datalog-title">LAST RECORDED TELEMETRY</div>
+      <div class="datalog-datetime">
+        <div class="datalog-date">${dateStr}</div>
+        <div class="datalog-time">${timeStr}</div>
+      </div>
+    </div>
+    <div class="datalog-grid">
+      <div class="datalog-section">
+        <div class="datalog-section-title">MS5611 BAROMETRIC</div>
+        <div class="datalog-row"><span>Temperature</span><span>${fmt(d.temp)} °C</span></div>
+        <div class="datalog-row"><span>Pressure</span><span>${fmt(d.press)} hPa</span></div>
+        <div class="datalog-row"><span>Altitude (baro)</span><span>${fmt(d.altCalc)} m</span></div>
+      </div>
+      <div class="datalog-section">
+        <div class="datalog-section-title">THERMAL DIODE (TMP)</div>
+        <div class="datalog-row"><span>Board Temp</span><span>${fmt(d.tmp)} °C</span></div>
+      </div>
+      <div class="datalog-section">
+        <div class="datalog-section-title">MPU6050 GYROSCOPE</div>
+        <div class="datalog-row"><span>GX</span><span>${fmt(d.gx)} °/s</span></div>
+        <div class="datalog-row"><span>GY</span><span>${fmt(d.gy)} °/s</span></div>
+        <div class="datalog-row"><span>GZ</span><span>${fmt(d.gz)} °/s</span></div>
+        <div class="datalog-row"><span>|G| Magnitude</span><span>${fmt(d.gm)} °/s</span></div>
+      </div>
+      <div class="datalog-section">
+        <div class="datalog-section-title">MPU6050 ACCELEROMETER</div>
+        <div class="datalog-row"><span>AX</span><span>${fmt(d.ax)} g</span></div>
+        <div class="datalog-row"><span>AY</span><span>${fmt(d.ay)} g</span></div>
+        <div class="datalog-row"><span>AZ</span><span>${fmt(d.az)} g</span></div>
+        <div class="datalog-row"><span>|A| Magnitude</span><span>${fmt(d.am)} g</span></div>
+      </div>
+      <div class="datalog-section">
+        <div class="datalog-section-title">SYSTEM</div>
+        <div class="datalog-row"><span>CPU Usage</span><span>${d.cpuUsage!=null?d.cpuUsage.toFixed(1):'--'} %</span></div>
+        <div class="datalog-row"><span>Battery</span><span>${d.battery!=null?d.battery.toFixed(2):'--.--'} V</span></div>
+        <div class="datalog-row"><span>Packet #</span><span>${d.packetCount||'--'}</span></div>
+        <div class="datalog-row"><span>Frame #</span><span>${d.frameCount||'--'}</span></div>
+      </div>
+    </div>
+  `;
+}
+function switchTab(tab){
+  const dashView=document.getElementById('view-cubesat');
+  const logView=document.getElementById('view-datalog');
+  const dashBtn=document.getElementById('tab-dashboard');
+  const logBtn=document.getElementById('tab-datalog');
+  if(tab==='datalog'){
+    if(dashView)dashView.style.display='none';
+    if(logView){ logView.style.display='flex'; renderDataLog(); }
+    if(dashBtn)dashBtn.classList.remove('act');
+    if(logBtn)logBtn.classList.add('act');
+  }else{
+    if(dashView)dashView.style.display='grid';
+    if(logView)logView.style.display='none';
+    if(dashBtn)dashBtn.classList.add('act');
+    if(logBtn)logBtn.classList.remove('act');
+  }
 }
 
 let logN=0;

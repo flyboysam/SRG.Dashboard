@@ -19,22 +19,22 @@
     <svg viewBox="0 0 1440 900" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <pattern id="g1" width="36" height="36" patternUnits="userSpaceOnUse">
-          <path d="M36 0L0 0 0 36" fill="none" stroke="#00d4ff" stroke-width=".25"/>
+          <path d="M36 0L0 0 0 36" fill="none" stroke="#4fc3f7" stroke-width=".25"/>
         </pattern>
         <pattern id="g2" width="48" height="48" patternUnits="userSpaceOnUse">
-          <path d="M0 48L48 0" fill="none" stroke="#ffb300" stroke-width=".2"/>
+          <path d="M0 48L48 0" fill="none" stroke="#ffc107" stroke-width=".2"/>
         </pattern>
       </defs>
       <rect width="100%" height="100%" fill="url(#g1)"/>
       <rect width="100%" height="100%" fill="url(#g2)" opacity=".5"/>
-      <ellipse cx="720" cy="450" rx="280" ry="180" fill="none" stroke="#00d4ff" stroke-width=".4" opacity=".4"/>
-      <ellipse cx="720" cy="450" rx="480" ry="320" fill="none" stroke="#ffb300" stroke-width=".25" opacity=".25"/>
-      <ellipse cx="720" cy="450" rx="140" ry="90" fill="none" stroke="#ff1744" stroke-width=".3" opacity=".3"/>
+      <ellipse cx="720" cy="450" rx="280" ry="180" fill="none" stroke="#4fc3f7" stroke-width=".4" opacity=".4"/>
+      <ellipse cx="720" cy="450" rx="480" ry="320" fill="none" stroke="#ffc107" stroke-width=".25" opacity=".25"/>
+      <ellipse cx="720" cy="450" rx="140" ry="90" fill="none" stroke="#FC3D21" stroke-width=".3" opacity=".3"/>
       <ellipse cx="720" cy="450" rx="380" ry="240" fill="none" stroke="#ffd740" stroke-width=".2" opacity=".15"/>
-      <line x1="720" y1="0" x2="720" y2="900" stroke="#00d4ff" stroke-width=".25" opacity=".18"/>
-      <line x1="0" y1="450" x2="1440" y2="450" stroke="#ffb300" stroke-width=".2" opacity=".15"/>
-      <line x1="0" y1="0" x2="1440" y2="900" stroke="#00d4ff" stroke-width=".12" opacity=".08"/>
-      <line x1="1440" y1="0" x2="0" y2="900" stroke="#ffb300" stroke-width=".12" opacity=".08"/>
+      <line x1="720" y1="0" x2="720" y2="900" stroke="#4fc3f7" stroke-width=".25" opacity=".18"/>
+      <line x1="0" y1="450" x2="1440" y2="450" stroke="#ffc107" stroke-width=".2" opacity=".15"/>
+      <line x1="0" y1="0" x2="1440" y2="900" stroke="#4fc3f7" stroke-width=".12" opacity=".08"/>
+      <line x1="1440" y1="0" x2="0" y2="900" stroke="#ffc107" stroke-width=".12" opacity=".08"/>
     </svg>
   </div>
 
@@ -79,6 +79,10 @@
   <!-- NAVBAR -->
   <div class="nb">
     <div class="nb-left">
+      <div class="nb-tabs">
+        <button class="nb-tab act" id="tab-dashboard" onclick="switchTab('dashboard')">DASHBOARD</button>
+        <button class="nb-tab" id="tab-datalog" onclick="switchTab('datalog')">DATA LOG</button>
+      </div>
       <div class="nb-missionid">◈ SRG DASHBOARD</div>
       <div class="nb-meta">
         <div class="nb-meta-top" id="nb-meta-top">GROUND CONTROL STATION // LIVE TELEMETRY</div>
@@ -233,6 +237,13 @@
     </div>
 
   </div><!-- /view-cubesat -->
+
+  <!-- DATA LOG VIEW -->
+  <div class="view-datalog" id="view-datalog" style="display:none;flex:1;flex-direction:column;padding:24px;overflow:auto">
+    <div class="datalog-container" id="datalog-content">
+      <div class="datalog-empty">No telemetry recorded yet. Data will appear when connected to Adafruit IO.</div>
+    </div>
+  </div>
 
   <!-- BOTTOM BAR -->
   <div class="bbar">
