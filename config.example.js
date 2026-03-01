@@ -10,3 +10,4 @@ window.ADAFRUIT_IO_KEY = '';
 // Optional: override feed names if yours differ (both temps in °C)
 // window.ADAFRUIT_MS5611_TEMP_FEED = 'temperature';  // MS5611 barometric sensor
 // window.ADAFRUIT_PI_CORE_TEMP_FEED = 'gpu-temp';   // Pi-Core temp
+// Gyro/accel (MPU6050): gx, gy, gz, ax, ay, az — create these feeds in Adafruit IO if using push_to_aio

@@ -20,7 +20,7 @@ const ADAFRUIT_IO_KEY = (typeof window !== 'undefined' && window.ADAFRUIT_IO_KEY
 const ADAFRUIT_IO_BASE = 'https://io.adafruit.com/api/v2';
 const ADAFRUIT_MS5611_TEMP = (typeof window !== 'undefined' && window.ADAFRUIT_MS5611_TEMP_FEED) || 'temperature';
 const ADAFRUIT_PI_CORE_TEMP = (typeof window !== 'undefined' && window.ADAFRUIT_PI_CORE_TEMP_FEED) || 'gpu-temp';
-const DATA_MAX_AGE_MS = 30000;  // 30s — reject data older than this (dashboard not pushing)
+const DATA_MAX_AGE_MS = 180000;  // 3 min — Adafruit updates ~1.5–2 min
 
 // ═══════════════ USER STORE ═══════════════
 const DEF_USERS = [
@@ -330,6 +330,8 @@ async function startDash(){
       if(!tempMeta||!isDataFresh(tempMeta.created_at)||p==null||isNaN(parseFloat(tempMeta.value))||isNaN(parseFloat(p))){
         throw new Error('No fresh data from Adafruit');
       }
+      playConnectionSound();
+      connectionSoundPlayed=true;
     } catch(_) {
       dataMode='sim';
       playConnectionFailedSound();
@@ -441,32 +443,35 @@ function tickMET(){
 
 async function tickTel(){
   let temp, press, altCalc, tmp;
-  let gx=null, gy=null, gz=null, ax=null, ay=null, az=null;  // Always null — no gyro/accel feeds in Adafruit
+  let gx=null, gy=null, gz=null, ax=null, ay=null, az=null;
   let cpuUsage=null, battery=null;
   let source = 'sim';
 
-  // Adafruit IO — ms5611-temp, gpu-temp, pressure, cpu-usage, vibration, battery (no gyro/accel feeds)
+  // Adafruit IO — temp, pressure, gpu-temp, cpu-usage, vibration, battery, gx gy gz ax ay az (optional)
   if(source==='sim' && (dataMode==='adafruit') && ADAFRUIT_IO_KEY){
     try{
-      const [tempMeta,pressure,cpuUsageRaw,piCoreTemp,vibration,batteryRaw]=await Promise.all([
+      const [tempMeta,pressure,cpuUsageRaw,piCoreTemp,vibration,batteryRaw,gxRaw,gyRaw,gzRaw,axRaw,ayRaw,azRaw]=await Promise.all([
         fetchAdafruitLastWithMeta(ADAFRUIT_MS5611_TEMP),
         fetchAdafruitLast('pressure'),
         fetchAdafruitLast('cpu-usage'),
         fetchAdafruitLast(ADAFRUIT_PI_CORE_TEMP),
         fetchAdafruitLast('vibration'),
-        fetchAdafruitLast('battery')
+        fetchAdafruitLast('battery'),
+        fetchAdafruitLast('gx'), fetchAdafruitLast('gy'), fetchAdafruitLast('gz'),
+        fetchAdafruitLast('ax'), fetchAdafruitLast('ay'), fetchAdafruitLast('az')
       ]);
       const ms5611Temp=tempMeta?tempMeta.value:null;
       if(!tempMeta||!isDataFresh(tempMeta.created_at)) throw new Error('Data stale');
       const t=parseFloat(ms5611Temp), p=parseFloat(pressure), v=parseFloat(vibration);
       const piTemp=parseFloat(piCoreTemp);
       cpuUsage=parseFloat(cpuUsageRaw); battery=parseFloat(batteryRaw);
+      const pFloat=(v)=>v!=null&&v!==''&&!isNaN(parseFloat(v))?+parseFloat(v):null;
+      gx=pFloat(gxRaw); gy=pFloat(gyRaw); gz=pFloat(gzRaw);
+      ax=pFloat(axRaw); ay=pFloat(ayRaw); az=pFloat(azRaw);
       if(!isNaN(t)&&!isNaN(p)){
         temp=t; press=p;
         altCalc=+(44330*(1-Math.pow(press/1013.25,1/5.255))).toFixed(1);
         tmp=!isNaN(piTemp)?piTemp:temp;
-        // Gyro/accel not in Adafruit feeds — show placeholders, never fake values
-        gx=null; gy=null; gz=null; ax=null; ay=null; az=null;
         source='adafruit'; liveFailCount=0;
         if(!connectionSoundPlayed){ playConnectionSound(); connectionSoundPlayed=true; }
       } else { throw new Error('Invalid Adafruit data'); }
