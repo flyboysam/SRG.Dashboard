@@ -22,6 +22,13 @@ const ADAFRUIT_MS5611_TEMP = (typeof window !== 'undefined' && window.ADAFRUIT_M
 const ADAFRUIT_PI_CORE_TEMP = (typeof window !== 'undefined' && window.ADAFRUIT_PI_CORE_TEMP_FEED) || 'gpu-temp';
 const DATA_MAX_AGE_MS = 180000;  // 3 min — Adafruit updates ~1.5–2 min
 
+// ═══════════════ MQTT / HIVEMQ ═══════════════
+const MQTT_BROKER = 'wss://broker.hivemq.com:8884/mqtt';
+const MQTT_TOPIC  = 'cubesatsim/telemetry';
+let mqttClient = null;
+let mqttConnected = false;
+let mqttFrame = null;
+
 // ═══════════════ USER STORE ═══════════════
 const DEF_USERS = [
   {id:'flyboysam', pw:'Airplane11!', role:'admin', created:'SYSTEM'},
@@ -83,6 +90,49 @@ function playConnectionFailedSound(){
     a.volume=0.7;a.currentTime=0;
     a.play().catch(()=>{});
   }catch(_){}
+}
+
+function setupMQTT(){
+  if(typeof mqtt==='undefined' || mqttClient) return;
+  try {
+    mqttClient = mqtt.connect(MQTT_BROKER, {
+      clientId: 'srg-dashboard-' + Math.random().toString(36).slice(2,8),
+      clean: true,
+      reconnectPeriod: 3000,
+    });
+    mqttClient.on('connect', () => {
+      mqttConnected = true;
+      dataMode = 'live';
+      updateModeIndicator(false);
+      tlog(`MQTT CONNECTED — ${MQTT_TOPIC}`,'tok');
+      mqttClient.subscribe(MQTT_TOPIC, {qos:1}, (err) => {
+        if(err) tlog(`MQTT SUBSCRIBE FAILED: ${err.message}`,'terr');
+      });
+    });
+    mqttClient.on('message', (topic, payload) => {
+      if(topic !== MQTT_TOPIC) return;
+      try {
+        mqttFrame = JSON.parse(payload.toString());
+      } catch(e) {
+        tlog('MQTT PARSE ERROR','terr');
+      }
+    });
+    mqttClient.on('error', (err) => {
+      mqttConnected = false;
+      tlog(`MQTT ERROR: ${err.message}`,'terr');
+      updateModeIndicator(true);
+    });
+    mqttClient.on('reconnect', () => {
+      mqttConnected = false;
+      updateModeIndicator(true);
+    });
+    mqttClient.on('offline', () => {
+      mqttConnected = false;
+      updateModeIndicator(true);
+    });
+  } catch(e) {
+    tlog(`MQTT INIT ERROR: ${e.message}`,'terr');
+  }
 }
 
 // ═══════════════ STARFIELD ═══════════════
@@ -321,7 +371,11 @@ async function startDash(){
   tlog('SESSION STARTED — TELEMETRY ACQUISITION ACTIVE','tok');
   tlog('SENSORS ONLINE: MS5611 · MPU6050 · TMP-DIODE','tok');
 
-  if(ADAFRUIT_IO_KEY){
+  if(typeof mqtt !== 'undefined'){
+    dataMode='live'; liveFailCount=0;
+    tlog('TELEMETRY FROM MQTT HIVEMQ — LIVE MODE','tinf');
+    setupMQTT();
+  } else if(ADAFRUIT_IO_KEY){
     dataMode='adafruit'; liveFailCount=0;
     tlog('TELEMETRY FROM ADAFRUIT IO (push_to_aio.py on CubeSat)','tinf');
     // Immediate check — if dashboard not running or data stale, play failure sound right away
@@ -355,6 +409,8 @@ function stopDash(){
   timers=[];
   tHist=[];tmpHist=[];aHist=[];frames=0;pkts=0;
   connectionSoundPlayed=false;
+  mqttFrame=null;
+  if(mqttClient){ try{ mqttClient.end(true); }catch(_){} mqttClient=null; mqttConnected=false; }
   const tl=document.getElementById('tlog');if(tl)tl.innerHTML='';
 }
 
@@ -380,6 +436,21 @@ function updateModeIndicator(offline){
 async function tryReconnect(){
   const btn=document.getElementById('reconnect-btn');
   if(btn){btn.classList.add('trying');btn.textContent='⟳ TRYING...';}
+
+  if(typeof mqtt !== 'undefined'){
+    tlog('TRYING MQTT HIVEMQ...','tinf');
+    if(!mqttClient) setupMQTT();
+    // give the async connect a moment to fire
+    await new Promise(r => setTimeout(r, 1500));
+    if(mqttConnected){
+      dataMode='live'; liveFailCount=0;
+      updateModeIndicator(false);
+      tlog('MQTT CONNECTED ✓','tok');
+      playConnectionSound(); connectionSoundPlayed=true;
+      if(btn){btn.classList.remove('trying');btn.textContent='⟳ RECONNECT';}
+      return;
+    }
+  }
 
   if(ADAFRUIT_IO_KEY){
     tlog('TRYING ADAFRUIT IO...','tinf');
@@ -448,6 +519,39 @@ async function tickTel(){
   let gx=null, gy=null, gz=null, ax=null, ay=null, az=null;
   let cpuUsage=null, battery=null;
   let source = 'sim';
+
+  // MQTT / HiveMQ — immediate frame from cubesatsim/telemetry
+  if(source==='sim' && dataMode==='live' && mqttFrame){
+    try {
+      const pFloat=(v)=>v!=null&&v!==''&&!isNaN(parseFloat(v))?+parseFloat(v):null;
+      const t = pFloat(mqttFrame.temp_ms ?? mqttFrame.temp ?? mqttFrame.temperature);
+      const p = pFloat(mqttFrame.pres_ms ?? mqttFrame.pres ?? mqttFrame.pressure);
+      const piTemp = pFloat(mqttFrame.temp_tmp ?? mqttFrame.tmp ?? mqttFrame.temp_diode);
+      const cpuRaw = pFloat(mqttFrame.cpuUsage ?? mqttFrame.cpu ?? mqttFrame['cpu-usage'] ?? mqttFrame.cpu_usage);
+      const batRaw = pFloat(mqttFrame.battery ?? mqttFrame.voltage ?? mqttFrame.bat);
+      cpuUsage = cpuRaw;
+      battery = batRaw;
+      gx = pFloat(mqttFrame.gx); gy = pFloat(mqttFrame.gy); gz = pFloat(mqttFrame.gz);
+      ax = pFloat(mqttFrame.ax); ay = pFloat(mqttFrame.ay); az = pFloat(mqttFrame.az);
+      if(t!=null && p!=null){
+        temp = t; press = p;
+        altCalc = +(44330*(1-Math.pow(press/1013.25,1/5.255))).toFixed(1);
+        tmp = piTemp!=null ? piTemp : temp;
+        source='live'; liveFailCount=0;
+        if(!connectionSoundPlayed){ playConnectionSound(); connectionSoundPlayed=true; }
+      }
+    } catch(err){
+      liveFailCount++;
+      if(liveFailCount===1){
+        tlog(`MQTT DATA ERROR: ${err.message}`,'terr');
+        playConnectionFailedSound();
+      }
+      if(liveFailCount>=LIVE_FAIL_MAX && dataMode==='live'){
+        tlog('MQTT OFFLINE — AWAITING RECONNECT','terr');
+        updateModeIndicator(true);
+      }
+    }
+  }
 
   // Adafruit IO — temp, pressure, gpu-temp, cpu-usage, vibration, battery, gx gy gz ax ay az (optional)
   if(source==='sim' && (dataMode==='adafruit') && ADAFRUIT_IO_KEY){
@@ -550,7 +654,8 @@ async function tickTel(){
   set('rf-s',hasData?'▮▮▮▮▯':'▯▯▯▯▯');  // Fixed when connected — no fake random
 
   const fmt=(v)=>v!=null&&typeof v==='number'?v.toFixed(2):'-.-';
-  const raw=hasData?`OK MS5611 ${temp} ${press} ${altCalc} MPU6050 ${fmt(gx)} ${fmt(gy)} ${fmt(gz)} ${fmt(ax)} ${fmt(ay)} ${fmt(az)} TMP ${tmp}`:'NO DATA — ADAFRUIT IO OFFLINE';
+  const offlineLabel = dataMode==='live' ? 'MQTT OFFLINE' : 'ADAFRUIT IO OFFLINE';
+  const raw=hasData?`OK MS5611 ${temp} ${press} ${altCalc} MPU6050 ${fmt(gx)} ${fmt(gy)} ${fmt(gz)} ${fmt(ax)} ${fmt(ay)} ${fmt(az)} TMP ${tmp}`:`NO DATA — ${offlineLabel}`;
   document.getElementById('rawstr').innerHTML=`RAW › <span>${raw}</span>`;
 
   if(hasData){
@@ -628,7 +733,7 @@ function renderDataLog(){
   const el=document.getElementById('datalog-content');
   if(!el)return;
   if(!lastRecordedData){
-    el.innerHTML='<div class="datalog-empty">No telemetry recorded yet. Data will appear when connected to Adafruit IO.</div>';
+    el.innerHTML='<div class="datalog-empty">No telemetry recorded yet. Data will appear when connected to HiveMQ or Adafruit IO.</div>';
     return;
   }
   const d=lastRecordedData;

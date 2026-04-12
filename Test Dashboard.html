@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CubeSatSim Ground Station</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.0.5/mqtt.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #080E14;
+    --panel:    #0D1721;
+    --border:   #1A3050;
+    --glow:     #0A84FF;
+    --red:      #FF3B30;
+    --green:    #30D158;
+    --orange:   #FF9F0A;
+    --yellow:   #FFD60A;
+    --teal:     #5AC8FA;
+    --purple:   #BF5AF2;
+    --text:     #E8F4FF;
+    --subtext:  #5E7A99;
+    --font-hud: 'Share Tech Mono', monospace;
+    --font-title: 'Orbitron', sans-serif;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-hud);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Starfield background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,0.6) 0%, transparent 100%),
+      radial-gradient(1px 1px at 25% 40%, rgba(255,255,255,0.4) 0%, transparent 100%),
+      radial-gradient(1px 1px at 45% 10%, rgba(255,255,255,0.5) 0%, transparent 100%),
+      radial-gradient(1px 1px at 60% 70%, rgba(255,255,255,0.3) 0%, transparent 100%),
+      radial-gradient(1px 1px at 75% 30%, rgba(255,255,255,0.6) 0%, transparent 100%),
+      radial-gradient(1px 1px at 85% 55%, rgba(255,255,255,0.4) 0%, transparent 100%),
+      radial-gradient(1px 1px at 90% 20%, rgba(255,255,255,0.5) 0%, transparent 100%),
+      radial-gradient(1px 1px at 15% 80%, rgba(255,255,255,0.3) 0%, transparent 100%),
+      radial-gradient(1px 1px at 35% 60%, rgba(255,255,255,0.4) 0%, transparent 100%),
+      radial-gradient(1px 1px at 55% 85%, rgba(255,255,255,0.5) 0%, transparent 100%),
+      radial-gradient(1px 1px at 70% 45%, rgba(255,255,255,0.3) 0%, transparent 100%),
+      radial-gradient(1px 1px at 95% 75%, rgba(255,255,255,0.6) 0%, transparent 100%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Header */
+  header {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    background: linear-gradient(180deg, rgba(10,132,255,0.08) 0%, transparent 100%);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .header-left { display: flex; align-items: center; gap: 16px; }
+
+  .sat-icon {
+    font-size: 28px;
+    animation: orbit 8s linear infinite;
+  }
+  @keyframes orbit {
+    0%   { transform: rotate(0deg) translateX(4px) rotate(0deg); }
+    100% { transform: rotate(360deg) translateX(4px) rotate(-360deg); }
+  }
+
+  h1 {
+    font-family: var(--font-title);
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: var(--text);
+    text-transform: uppercase;
+  }
+  h1 span { color: var(--glow); }
+
+  .header-right { display: flex; align-items: center; gap: 20px; }
+
+  #conn-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: var(--subtext);
+    text-transform: uppercase;
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--subtext);
+    transition: background 0.4s;
+  }
+  .dot.live {
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  .dot.error { background: var(--red); box-shadow: 0 0 8px var(--red); }
+  @keyframes pulse {
+    0%,100% { opacity: 1; } 50% { opacity: 0.4; }
+  }
+
+  #frame-count {
+    font-size: 11px;
+    color: var(--subtext);
+    letter-spacing: 1px;
+  }
+
+  /* Main grid */
+  .grid {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    grid-template-rows: auto auto;
+    gap: 12px;
+    padding: 12px 16px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  /* Panel base */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .panel-title {
+    font-family: var(--font-title);
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--subtext);
+    text-transform: uppercase;
+    padding: 10px 14px 6px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel-title::before {
+    content: '';
+    width: 3px; height: 12px;
+    background: var(--glow);
+    border-radius: 2px;
+    box-shadow: 0 0 6px var(--glow);
+  }
+
+  /* Left column */
+  .left-col {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Telemetry cards */
+  .telem-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .tcard {
+    background: rgba(10,132,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+  .tcard:hover { border-color: var(--glow); }
+  .tcard::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent, var(--glow));
+    opacity: 0.6;
+  }
+
+  .tcard-label {
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--subtext);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .tcard-value {
+    font-family: var(--font-title);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--accent, var(--text));
+    line-height: 1;
+    transition: color 0.4s;
+  }
+  .tcard-unit {
+    font-size: 10px;
+    color: var(--subtext);
+    margin-top: 2px;
+  }
+
+  /* Gauge ring */
+  .gauge-wrap {
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .gauge-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .gauge-ring {
+    position: relative;
+    width: 56px; height: 56px;
+    flex-shrink: 0;
+  }
+  .gauge-ring svg { transform: rotate(-90deg); }
+  .gauge-bg  { fill: none; stroke: var(--border); stroke-width: 5; }
+  .gauge-arc {
+    fill: none;
+    stroke-width: 5;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.6s cubic-bezier(0.4,0,0.2,1), stroke 0.4s;
+  }
+  .gauge-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+    color: var(--text);
+  }
+
+  .gauge-info { flex: 1; min-width: 0; }
+  .gauge-name {
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--subtext);
+    text-transform: uppercase;
+  }
+  .gauge-val {
+    font-family: var(--font-title);
+    font-size: 16px;
+    font-weight: 700;
+    margin: 1px 0;
+  }
+  .gauge-bar-wrap {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-top: 4px;
+    overflow: hidden;
+  }
+  .gauge-bar {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+    width: 0%;
+  }
+
+  /* Attitude indicator */
+  .attitude-wrap {
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  #attitude-canvas {
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    box-shadow: 0 0 20px rgba(10,132,255,0.15);
+  }
+
+  .attitude-readout {
+    display: flex;
+    gap: 16px;
+    font-size: 11px;
+  }
+  .att-val { text-align: center; }
+  .att-lbl { color: var(--subtext); font-size: 9px; letter-spacing: 1px; }
+  .att-num { color: var(--teal); font-size: 14px; font-family: var(--font-title); }
+
+  /* Orbit info */
+  .orbit-rows { padding: 8px 14px 10px; }
+  .orbit-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(26,48,80,0.5);
+    font-size: 12px;
+  }
+  .orbit-row:last-child { border-bottom: none; }
+  .orbit-key { color: var(--subtext); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+  .orbit-val { color: var(--text); font-family: var(--font-title); font-size: 12px; }
+
+  /* Right column charts */
+  .right-col {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .chart-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .chart-panel { padding: 8px 12px 10px; }
+  .chart-wrap  { position: relative; height: 130px; }
+
+  .chart-full { padding: 8px 12px 10px; }
+  .chart-full .chart-wrap { height: 110px; }
+
+  /* Panel grid: full width battery */
+  .panel-grid-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+  }
+
+  /* Log */
+  .log-panel { padding: 0; }
+  .log-inner {
+    height: 90px;
+    overflow-y: auto;
+    padding: 6px 12px;
+    font-size: 10px;
+    line-height: 1.7;
+    color: var(--subtext);
+  }
+  .log-inner::-webkit-scrollbar { width: 4px; }
+  .log-inner::-webkit-scrollbar-track { background: transparent; }
+  .log-inner::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .log-entry { display: flex; gap: 8px; }
+  .log-time { color: var(--glow); opacity: 0.6; flex-shrink: 0; }
+  .log-msg  { color: var(--text); opacity: 0.7; }
+
+  /* Scanning line effect */
+  .panel::after {
+    content: '';
+    position: absolute;
+    top: -100%;
+    left: 0; right: 0;
+    height: 40%;
+    background: linear-gradient(180deg, transparent 0%,
+      rgba(10,132,255,0.02) 50%, transparent 100%);
+    animation: scan 6s linear infinite;
+    pointer-events: none;
+  }
+  .panel { position: relative; }
+  @keyframes scan {
+    0%   { top: -40%; }
+    100% { top: 140%; }
+  }
+
+  /* Blink on new data */
+  @keyframes dataBlink {
+    0%   { background: rgba(10,132,255,0.12); }
+    100% { background: transparent; }
+  }
+  .blink { animation: dataBlink 0.4s ease-out; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .grid { grid-template-columns: 1fr; }
+    .left-col, .right-col { grid-column: 1; grid-row: auto; }
+    .chart-grid { grid-template-columns: 1fr; }
+    .panel-grid-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <span class="sat-icon">🛰</span>
+    <div>
+      <h1>Cube<span>Sat</span>Sim &nbsp;·&nbsp; Ground Station</h1>
+    </div>
+  </div>
+  <div class="header-right">
+    <span id="frame-count">FRAMES: 0</span>
+    <div id="conn-status">
+      <div class="dot" id="conn-dot"></div>
+      <span id="conn-label">CONNECTING</span>
+    </div>
+  </div>
+</header>
+
+<div class="grid">
+
+  <!-- ── Left column ─────────────────────────────────────────── -->
+  <div class="left-col">
+
+    <!-- Key telemetry cards -->
+    <div class="panel">
+      <div class="panel-title">Live Telemetry</div>
+      <div class="telem-cards">
+        <div class="tcard" style="--accent:var(--red)">
+          <div class="tcard-label">Temperature</div>
+          <div class="tcard-value" id="v-temp">—</div>
+          <div class="tcard-unit">°C  ·  MS5611</div>
+        </div>
+        <div class="tcard" style="--accent:var(--teal)">
+          <div class="tcard-label">Pressure</div>
+          <div class="tcard-value" id="v-pres">—</div>
+          <div class="tcard-unit">hPa</div>
+        </div>
+        <div class="tcard" style="--accent:var(--green)">
+          <div class="tcard-label">Battery</div>
+          <div class="tcard-value" id="v-volt">—</div>
+          <div class="tcard-unit">Volts  ·  <span id="v-pct">—</span>%</div>
+        </div>
+        <div class="tcard" style="--accent:var(--orange)">
+          <div class="tcard-label">Current</div>
+          <div class="tcard-value" id="v-curr">—</div>
+          <div class="tcard-unit"><span id="v-charge">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gauge bars -->
+    <div class="panel">
+      <div class="panel-title">Sensor Gauges</div>
+      <div class="gauge-wrap">
+
+        <div class="gauge-row">
+          <div class="gauge-ring">
+            <svg viewBox="0 0 56 56" width="56" height="56">
+              <circle class="gauge-bg" cx="28" cy="28" r="24"/>
+              <circle class="gauge-arc" id="g-temp-arc" cx="28" cy="28" r="24"
+                stroke="var(--red)"
+                stroke-dasharray="150.8"
+                stroke-dashoffset="150.8"/>
+            </svg>
+            <div class="gauge-center" id="g-temp-pct">0%</div>
+          </div>
+          <div class="gauge-info">
+            <div class="gauge-name">Temperature</div>
+            <div class="gauge-val" style="color:var(--red)" id="g-temp-val">—°C</div>
+            <div class="gauge-bar-wrap">
+              <div class="gauge-bar" id="g-temp-bar" style="background:var(--red)"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="gauge-row">
+          <div class="gauge-ring">
+            <svg viewBox="0 0 56 56" width="56" height="56">
+              <circle class="gauge-bg" cx="28" cy="28" r="24"/>
+              <circle class="gauge-arc" id="g-pres-arc" cx="28" cy="28" r="24"
+                stroke="var(--teal)"
+                stroke-dasharray="150.8"
+                stroke-dashoffset="150.8"/>
+            </svg>
+            <div class="gauge-center" id="g-pres-pct">0%</div>
+          </div>
+          <div class="gauge-info">
+            <div class="gauge-name">Pressure</div>
+            <div class="gauge-val" style="color:var(--teal)" id="g-pres-val">—hPa</div>
+            <div class="gauge-bar-wrap">
+              <div class="gauge-bar" id="g-pres-bar" style="background:var(--teal)"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="gauge-row">
+          <div class="gauge-ring">
+            <svg viewBox="0 0 56 56" width="56" height="56">
+              <circle class="gauge-bg" cx="28" cy="28" r="24"/>
+              <circle class="gauge-arc" id="g-volt-arc" cx="28" cy="28" r="24"
+                stroke="var(--green)"
+                stroke-dasharray="150.8"
+                stroke-dashoffset="150.8"/>
+            </svg>
+            <div class="gauge-center" id="g-volt-pct">0%</div>
+          </div>
+          <div class="gauge-info">
+            <div class="gauge-name">Voltage</div>
+            <div class="gauge-val" style="color:var(--green)" id="g-volt-val">—V</div>
+            <div class="gauge-bar-wrap">
+              <div class="gauge-bar" id="g-volt-bar" style="background:var(--green)"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="gauge-row">
+          <div class="gauge-ring">
+            <svg viewBox="0 0 56 56" width="56" height="56">
+              <circle class="gauge-bg" cx="28" cy="28" r="24"/>
+              <circle class="gauge-arc" id="g-cpu-arc" cx="28" cy="28" r="24"
+                stroke="var(--purple)"
+                stroke-dasharray="150.8"
+                stroke-dashoffset="150.8"/>
+            </svg>
+            <div class="gauge-center" id="g-cpu-pct">0%</div>
+          </div>
+          <div class="gauge-info">
+            <div class="gauge-name">CPU Temp</div>
+            <div class="gauge-val" style="color:var(--purple)" id="g-cpu-val">—°C</div>
+            <div class="gauge-bar-wrap">
+              <div class="gauge-bar" id="g-cpu-bar" style="background:var(--purple)"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Attitude indicator -->
+    <div class="panel">
+      <div class="panel-title">Attitude / Orientation</div>
+      <div class="attitude-wrap">
+        <canvas id="attitude-canvas" width="160" height="160"></canvas>
+        <div class="attitude-readout">
+          <div class="att-val">
+            <div class="att-lbl">ROLL</div>
+            <div class="att-num" id="att-roll">—</div>
+          </div>
+          <div class="att-val">
+            <div class="att-lbl">PITCH</div>
+            <div class="att-num" id="att-pitch">—</div>
+          </div>
+          <div class="att-val">
+            <div class="att-lbl">YAW</div>
+            <div class="att-num" id="att-yaw">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Solar panels -->
+    <div class="panel">
+      <div class="panel-title">Solar Panels</div>
+      <div class="orbit-rows">
+        <div class="orbit-row">
+          <span class="orbit-key">+X Panel</span>
+          <span class="orbit-val" id="px-v">—V</span>
+        </div>
+        <div class="orbit-row">
+          <span class="orbit-key">+Y Panel</span>
+          <span class="orbit-val" id="py-v">—V</span>
+        </div>
+        <div class="orbit-row">
+          <span class="orbit-key">+Z Panel</span>
+          <span class="orbit-val" id="pz-v">—V</span>
+        </div>
+        <div class="orbit-row">
+          <span class="orbit-key">Spacecraft ID</span>
+          <span class="orbit-val" style="color:var(--glow)">FOX-7 / CubeSatSim</span>
+        </div>
+        <div class="orbit-row">
+          <span class="orbit-key">Mode</span>
+          <span class="orbit-val" style="color:var(--green)">FSK TRANSPONDER</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Right column ────────────────────────────────────────── -->
+  <div class="right-col">
+
+    <div class="chart-grid">
+      <div class="panel chart-panel">
+        <div class="panel-title">Temperature  (°C)</div>
+        <div class="chart-wrap"><canvas id="chart-temp"></canvas></div>
+      </div>
+      <div class="panel chart-panel">
+        <div class="panel-title">Pressure  (hPa)</div>
+        <div class="chart-wrap"><canvas id="chart-pres"></canvas></div>
+      </div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="panel chart-panel">
+        <div class="panel-title">Gyroscope  (°/s)</div>
+        <div class="chart-wrap"><canvas id="chart-gyro"></canvas></div>
+      </div>
+      <div class="panel chart-panel">
+        <div class="panel-title">Accelerometer  (g)</div>
+        <div class="chart-wrap"><canvas id="chart-acc"></canvas></div>
+      </div>
+    </div>
+
+    <div class="panel chart-full">
+      <div class="panel-title">Battery  —  Voltage (V) &amp; Current (mA)</div>
+      <div class="chart-wrap"><canvas id="chart-batt"></canvas></div>
+    </div>
+
+    <!-- Log -->
+    <div class="panel log-panel">
+      <div class="panel-title">Telemetry Log</div>
+      <div class="log-inner" id="log"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const BROKER = 'wss://broker.hivemq.com:8884/mqtt';
+const TOPIC  = 'cubesatsim/telemetry';
+const MAX_PTS = 200;
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let frameCount = 0;
+let yaw = 0;
+let rollSmooth = 0, pitchSmooth = 0, yawSmooth = 0;
+const bufs = {
+  temp:[], pres:[], gx:[], gy:[], gz:[],
+  ax:[], ay:[], az:[], volt:[], curr:[]
+};
+
+function pushBuf(key, val) {
+  bufs[key].push(val);
+  if (bufs[key].length > MAX_PTS) bufs[key].shift();
+}
+
+// ── Chart factory ─────────────────────────────────────────────────────────────
+const chartDefaults = {
+  type: 'line',
+  options: {
+    animation: false,
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { display: false },
+      y: {
+        grid:  { color: 'rgba(26,48,80,0.6)', lineWidth: 1 },
+        ticks: { color: '#5E7A99', font: { family: 'Share Tech Mono', size: 9 }, maxTicksLimit: 4 },
+        border: { color: 'rgba(26,48,80,0.4)' }
+      }
+    },
+    elements: { point: { radius: 0 }, line: { tension: 0.3, borderWidth: 2 } }
+  }
+};
+
+function mkChart(id, colors, labels) {
+  const ctx = document.getElementById(id).getContext('2d');
+  const datasets = colors.map((c, i) => ({
+    label: labels ? labels[i] : '',
+    data: [],
+    borderColor: c,
+    backgroundColor: c.replace(')', ',0.08)').replace('rgb','rgba'),
+    fill: colors.length === 1,
+  }));
+  const cfg = JSON.parse(JSON.stringify(chartDefaults));
+  cfg.data = { labels: [], datasets };
+  if (labels) cfg.options.plugins.legend = {
+    display: true,
+    labels: { color: '#5E7A99', font: { family: 'Share Tech Mono', size: 9 }, boxWidth: 12 }
+  };
+  return new Chart(ctx, cfg);
+}
+
+const charts = {
+  temp: mkChart('chart-temp', ['rgb(255,59,48)']),
+  pres: mkChart('chart-pres', ['rgb(90,200,250)']),
+  gyro: mkChart('chart-gyro', ['rgb(255,59,48)','rgb(48,209,88)','rgb(10,132,255)'], ['Gx','Gy','Gz']),
+  acc:  mkChart('chart-acc',  ['rgb(255,59,48)','rgb(48,209,88)','rgb(10,132,255)'], ['Ax','Ay','Az']),
+  batt: mkChart('chart-batt', ['rgb(48,209,88)','rgb(255,159,10)'], ['Voltage','Current']),
+};
+
+function updateChart(chart, ...datasets) {
+  const len = datasets[0].length;
+  chart.data.labels = Array.from({length: len}, (_,i) => i);
+  datasets.forEach((d, i) => { chart.data.datasets[i].data = [...d]; });
+  chart.update('none');
+}
+
+// ── Gauge helpers ─────────────────────────────────────────────────────────────
+const CIRC = 150.8;
+function setGauge(id, val, lo, hi) {
+  const pct = Math.max(0, Math.min(1, (val - lo) / (hi - lo)));
+  const offset = CIRC * (1 - pct);
+  const p = Math.round(pct * 100);
+  document.getElementById(`g-${id}-arc`).style.strokeDashoffset = offset;
+  document.getElementById(`g-${id}-pct`).textContent = p + '%';
+  document.getElementById(`g-${id}-bar`).style.width = p + '%';
+}
+
+// ── Attitude canvas ───────────────────────────────────────────────────────────
+const attCanvas = document.getElementById('attitude-canvas');
+const attCtx    = attCanvas.getContext('2d');
+const W = attCanvas.width, H = attCanvas.height, R = W / 2 - 6;
+
+function drawAttitude(roll, pitch) {
+  attCtx.clearRect(0, 0, W, H);
+  attCtx.save();
+  attCtx.beginPath();
+  attCtx.arc(W/2, H/2, R, 0, Math.PI*2);
+  attCtx.clip();
+
+  attCtx.save();
+  attCtx.translate(W/2, H/2);
+  attCtx.rotate(-roll * Math.PI / 180);
+  const po = pitch * 1.3;
+
+  // Sky
+  attCtx.fillStyle = '#1A4A8A';
+  attCtx.fillRect(-R, -R - po, R*2, R + po);
+  // Ground
+  attCtx.fillStyle = '#5C3D0F';
+  attCtx.fillRect(-R, -po, R*2, R + po);
+  // Horizon
+  attCtx.strokeStyle = 'rgba(255,255,255,0.9)';
+  attCtx.lineWidth = 1.5;
+  attCtx.beginPath();
+  attCtx.moveTo(-R, -po); attCtx.lineTo(R, -po);
+  attCtx.stroke();
+  // Pitch lines
+  attCtx.strokeStyle = 'rgba(255,255,255,0.4)';
+  attCtx.lineWidth = 1;
+  attCtx.font = '9px Share Tech Mono';
+  attCtx.fillStyle = 'rgba(255,255,255,0.5)';
+  for (const d of [-20,-10,10,20]) {
+    const y = -po - d * 1.3;
+    const lw = d % 20 === 0 ? R/3 : R/5;
+    attCtx.beginPath();
+    attCtx.moveTo(-lw, y); attCtx.lineTo(lw, y);
+    attCtx.stroke();
+    attCtx.fillText(Math.abs(d), lw + 3, y + 3);
+  }
+  attCtx.restore();
+
+  // Outer ring
+  attCtx.restore();
+  attCtx.strokeStyle = '#1A3050';
+  attCtx.lineWidth = 2;
+  attCtx.beginPath();
+  attCtx.arc(W/2, H/2, R, 0, Math.PI*2);
+  attCtx.stroke();
+
+  // Roll ticks
+  attCtx.save();
+  attCtx.translate(W/2, H/2);
+  for (const a of [-60,-45,-30,-20,-10,0,10,20,30,45,60]) {
+    attCtx.save();
+    attCtx.rotate(a * Math.PI / 180);
+    attCtx.strokeStyle = 'rgba(255,255,255,0.35)';
+    attCtx.lineWidth = 1;
+    const tk = a % 30 === 0 ? 7 : 4;
+    attCtx.beginPath();
+    attCtx.moveTo(0, -(R-1)); attCtx.lineTo(0, -(R-1-tk));
+    attCtx.stroke();
+    attCtx.restore();
+  }
+  // Roll pointer
+  attCtx.rotate(-roll * Math.PI / 180);
+  attCtx.fillStyle = '#FFD60A';
+  attCtx.beginPath();
+  attCtx.moveTo(0, -(R-14));
+  attCtx.lineTo(-5, -(R-5));
+  attCtx.lineTo(5,  -(R-5));
+  attCtx.closePath();
+  attCtx.fill();
+  attCtx.restore();
+
+  // Aircraft symbol
+  attCtx.strokeStyle = '#FFD60A';
+  attCtx.lineWidth = 2.5;
+  attCtx.lineCap = 'round';
+  const hs = R / 3;
+  attCtx.beginPath();
+  attCtx.moveTo(W/2 - hs*2, H/2); attCtx.lineTo(W/2 - hs, H/2);
+  attCtx.moveTo(W/2 + hs, H/2);   attCtx.lineTo(W/2 + hs*2, H/2);
+  attCtx.moveTo(W/2, H/2 - hs/2); attCtx.lineTo(W/2, H/2 + hs/2);
+  attCtx.stroke();
+  attCtx.fillStyle = '#FFD60A';
+  attCtx.beginPath();
+  attCtx.arc(W/2, H/2, 3, 0, Math.PI*2);
+  attCtx.fill();
+}
+
+// Smooth attitude animation
+let attRoll = 0, attPitch = 0, attTargR = 0, attTargP = 0;
+function animateAttitude() {
+  attRoll  += (attTargR - attRoll)  * 0.1;
+  attPitch += (attTargP - attPitch) * 0.1;
+  drawAttitude(attRoll, attPitch);
+  requestAnimationFrame(animateAttitude);
+}
+animateAttitude();
+
+// ── Log ───────────────────────────────────────────────────────────────────────
+function addLog(msg, color) {
+  const log  = document.getElementById('log');
+  const time = new Date().toTimeString().slice(0,8);
+  const el   = document.createElement('div');
+  el.className = 'log-entry';
+  el.innerHTML = `<span class="log-time">${time}</span><span class="log-msg" style="color:${color||''}">${msg}</span>`;
+  log.appendChild(el);
+  if (log.children.length > 50) log.removeChild(log.firstChild);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ── Process incoming frame ────────────────────────────────────────────────────
+function processFrame(f) {
+  frameCount++;
+  document.getElementById('frame-count').textContent = `FRAMES: ${frameCount}`;
+
+  // Orientation
+  const ax = f.ax || 0, ay = f.ay || 0, az = f.az || 1;
+  const roll  = Math.atan2(ay, az) * 180 / Math.PI;
+  const pitch = Math.atan2(-ax, Math.sqrt(ay*ay + az*az)) * 180 / Math.PI;
+  yaw += (f.gz || 0) * 0.3;
+  attTargR = roll; attTargP = pitch;
+
+  document.getElementById('att-roll').textContent  = roll.toFixed(1)  + '°';
+  document.getElementById('att-pitch').textContent = pitch.toFixed(1) + '°';
+  document.getElementById('att-yaw').textContent   = (yaw % 360).toFixed(1) + '°';
+
+  // Cards
+  const temp = f.temp_ms;
+  const pres = f.pres_ms;
+  const volt = f.voltage;
+  const curr = f.current;
+  const cpu  = f.temp_tmp;
+
+  if (temp != null) {
+    document.getElementById('v-temp').textContent = temp.toFixed(1);
+    document.getElementById('g-temp-val').textContent = temp.toFixed(1) + '°C';
+    setGauge('temp', temp, 15, 55);
+  }
+  if (pres != null) {
+    document.getElementById('v-pres').textContent = pres.toFixed(1);
+    document.getElementById('g-pres-val').textContent = pres.toFixed(1) + ' hPa';
+    setGauge('pres', pres, 950, 1000);
+  }
+  if (volt != null) {
+    const pct = Math.round(Math.max(0, Math.min(100, (volt - 3.5) / (4.2 - 3.5) * 100)));
+    document.getElementById('v-volt').textContent = volt.toFixed(2);
+    document.getElementById('v-pct').textContent  = pct;
+    document.getElementById('g-volt-val').textContent = volt.toFixed(3) + 'V';
+    setGauge('volt', volt, 3.4, 4.25);
+  }
+  if (curr != null) {
+    document.getElementById('v-curr').textContent  = Math.abs(curr).toFixed(0);
+    document.getElementById('v-charge').textContent = curr < 0 ? '↑ CHARGING' : '↓ DISCHARGING';
+  }
+  if (cpu != null) {
+    document.getElementById('g-cpu-val').textContent = cpu.toFixed(1) + '°C';
+    setGauge('cpu', cpu, 20, 80);
+  }
+
+  // Solar panels
+  if (f.px_v != null) document.getElementById('px-v').textContent = f.px_v.toFixed(3) + ' V';
+  if (f.py_v != null) document.getElementById('py-v').textContent = f.py_v.toFixed(3) + ' V';
+  if (f.pz_v != null) document.getElementById('pz-v').textContent = f.pz_v.toFixed(3) + ' V';
+
+  // Buffers
+  pushBuf('temp', temp); pushBuf('pres', pres);
+  pushBuf('gx', f.gx||0); pushBuf('gy', f.gy||0); pushBuf('gz', f.gz||0);
+  pushBuf('ax', ax); pushBuf('ay', ay); pushBuf('az', az);
+  pushBuf('volt', volt); pushBuf('curr', curr);
+
+  // Charts
+  updateChart(charts.temp, bufs.temp);
+  updateChart(charts.pres, bufs.pres);
+  updateChart(charts.gyro, bufs.gx, bufs.gy, bufs.gz);
+  updateChart(charts.acc,  bufs.ax, bufs.ay, bufs.az);
+  updateChart(charts.batt, bufs.volt, bufs.curr);
+
+  // Log
+  addLog(`temp=${temp?.toFixed(1)}°C  volt=${volt?.toFixed(2)}V  curr=${curr?.toFixed(0)}mA  pres=${pres?.toFixed(1)}hPa`);
+
+  // Blink panel
+  document.querySelectorAll('.tcard').forEach(el => {
+    el.classList.remove('blink');
+    void el.offsetWidth;
+    el.classList.add('blink');
+  });
+}
+
+// ── MQTT ──────────────────────────────────────────────────────────────────────
+const dot   = document.getElementById('conn-dot');
+const label = document.getElementById('conn-label');
+
+addLog('Connecting to broker.hivemq.com...', '#5E7A99');
+
+const client = mqtt.connect(BROKER, {
+  clientId: 'cubesat-web-' + Math.random().toString(36).slice(2,8),
+  clean: true,
+  reconnectPeriod: 3000,
+});
+
+client.on('connect', () => {
+  dot.className   = 'dot live';
+  label.textContent = 'LIVE';
+  addLog('Connected to MQTT broker', '#30D158');
+  client.subscribe(TOPIC, { qos: 1 }, (err) => {
+    if (!err) addLog(`Subscribed to ${TOPIC}`, '#0A84FF');
+    else      addLog('Subscribe failed: ' + err.message, '#FF3B30');
+  });
+});
+
+client.on('message', (topic, payload) => {
+  try {
+    const f = JSON.parse(payload.toString());
+    processFrame(f);
+  } catch(e) {
+    addLog('Parse error: ' + e.message, '#FF3B30');
+  }
+});
+
+client.on('error', (err) => {
+  dot.className   = 'dot error';
+  label.textContent = 'ERROR';
+  addLog('MQTT error: ' + err.message, '#FF3B30');
+});
+
+client.on('reconnect', () => {
+  dot.className   = 'dot';
+  label.textContent = 'RECONNECTING';
+  addLog('Reconnecting...', '#FF9F0A');
+});
+
+client.on('offline', () => {
+  dot.className   = 'dot error';
+  label.textContent = 'OFFLINE';
+});
+</script>
+</body>
+</html>
