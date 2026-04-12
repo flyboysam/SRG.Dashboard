@@ -373,8 +373,13 @@ async function startDash(){
 
   if(typeof mqtt !== 'undefined'){
     dataMode='live'; liveFailCount=0;
-    tlog('TELEMETRY FROM MQTT HIVEMQ — LIVE MODE','tinf');
-    setupMQTT();
+    if(mqttConnected){
+      tlog(`MQTT HIVEMQ — ALREADY CONNECTED — ${MQTT_TOPIC}`,'tok');
+      updateModeIndicator(false);
+    } else {
+      tlog('TELEMETRY FROM MQTT HIVEMQ — CONNECTING...','tinf');
+      setupMQTT();  // no-op if client already exists but not yet connected
+    }
   } else if(ADAFRUIT_IO_KEY){
     dataMode='adafruit'; liveFailCount=0;
     tlog('TELEMETRY FROM ADAFRUIT IO (push_to_aio.py on CubeSat)','tinf');
@@ -410,7 +415,9 @@ function stopDash(){
   tHist=[];tmpHist=[];aHist=[];frames=0;pkts=0;
   connectionSoundPlayed=false;
   mqttFrame=null;
-  if(mqttClient){ try{ mqttClient.end(true); }catch(_){} mqttClient=null; mqttConnected=false; }
+  // Keep mqttClient alive across logout so re-login is instant;
+  // only reset state so the next startDash() re-evaluates the connection
+  dataMode='sim';
   const tl=document.getElementById('tlog');if(tl)tl.innerHTML='';
 }
 
@@ -439,9 +446,6 @@ async function tryReconnect(){
 
   if(typeof mqtt !== 'undefined'){
     tlog('TRYING MQTT HIVEMQ...','tinf');
-    if(!mqttClient) setupMQTT();
-    // give the async connect a moment to fire
-    await new Promise(r => setTimeout(r, 1500));
     if(mqttConnected){
       dataMode='live'; liveFailCount=0;
       updateModeIndicator(false);
@@ -449,6 +453,21 @@ async function tryReconnect(){
       playConnectionSound(); connectionSoundPlayed=true;
       if(btn){btn.classList.remove('trying');btn.textContent='⟳ RECONNECT';}
       return;
+    }
+    // Client exists but disconnected — end it and create a fresh one
+    if(mqttClient){ try{ mqttClient.end(true); }catch(_){} mqttClient=null; mqttConnected=false; }
+    setupMQTT();
+    // Give the async connect up to 4 s to establish
+    for(let i=0;i<8;i++){
+      await new Promise(r=>setTimeout(r,500));
+      if(mqttConnected){
+        dataMode='live'; liveFailCount=0;
+        updateModeIndicator(false);
+        tlog('MQTT CONNECTED ✓','tok');
+        playConnectionSound(); connectionSoundPlayed=true;
+        if(btn){btn.classList.remove('trying');btn.textContent='⟳ RECONNECT';}
+        return;
+      }
     }
   }
 
@@ -528,7 +547,7 @@ async function tickTel(){
       const p = pFloat(mqttFrame.pres_ms ?? mqttFrame.pres ?? mqttFrame.pressure);
       const piTemp = pFloat(mqttFrame.temp_tmp ?? mqttFrame.tmp ?? mqttFrame.temp_diode);
       const cpuRaw = pFloat(mqttFrame.cpuUsage ?? mqttFrame.cpu ?? mqttFrame['cpu-usage'] ?? mqttFrame.cpu_usage);
-      const batRaw = pFloat(mqttFrame.battery ?? mqttFrame.voltage ?? mqttFrame.bat);
+      const batRaw = pFloat(mqttFrame.battery ?? mqttFrame.voltage ?? mqttFrame.volt ?? mqttFrame.bat);
       cpuUsage = cpuRaw;
       battery = batRaw;
       gx = pFloat(mqttFrame.gx); gy = pFloat(mqttFrame.gy); gz = pFloat(mqttFrame.gz);
@@ -811,3 +830,9 @@ function tlog(msg,cls){
   el.appendChild(r);el.scrollTop=el.scrollHeight;
   if(++logN>150)el.removeChild(el.firstChild);
 }
+
+// ═══════════════ PAGE LOAD — PRE-CONNECT MQTT ═══════════════
+// Start connecting to HiveMQ immediately on page load (before login)
+// so the WebSocket is already established by the time the user authenticates.
+// setupMQTT() is a no-op if mqtt.js is absent or the client already exists.
+if(typeof mqtt !== 'undefined') setupMQTT();
