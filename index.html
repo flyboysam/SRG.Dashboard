@@ -143,24 +143,32 @@
       </div>
     </div>
 
-    <!-- LEFT BOTTOM: TMP Diode -->
+    <!-- LEFT BOTTOM: Thermal Sensors (Pi IHU + Diode D3) -->
     <div class="pnl" style="grid-column:1;grid-row:2">
       <div class="hud-tl"></div><div class="hud-tr"></div><div class="hud-bl"></div><div class="hud-br"></div>
-      <div class="pt"><span class="status-led"></span> THERMAL <span class="chip">DIODE D3</span></div>
+      <div class="pt"><span class="status-led"></span> THERMAL <span class="chip">SENSORS</span></div>
 
       <div class="bv cy" id="tmp-v">--.-</div>
       <div style="display:flex;align-items:baseline;gap:4px;margin-top:1px">
         <span class="bu">°C</span>
         <span style="font-size:9px;letter-spacing:1px;color:rgba(255,179,0,.7);margin-left:6px" id="tmp-tf">-- °F</span>
       </div>
-      <div class="bl">BOARD TEMPERATURE (TMP)</div>
-      <div class="gb" style="margin:3px 0 7px"><div class="gf cy" id="gf-tmp" style="width:50%"></div></div>
+      <div class="bl">PI IHU TEMPERATURE</div>
+      <div class="gb" style="margin:3px 0 5px"><div class="gf cy" id="gf-tmp" style="width:50%"></div></div>
 
-      <div class="sr"><span class="sl">Δ MS5611 − TMP</span><span class="sv" id="dt">-- °C</span></div>
+      <div class="bv" id="tmp-diode-v" style="font-size:22px;margin-top:5px">--.-</div>
+      <div style="display:flex;align-items:baseline;gap:4px;margin-top:1px">
+        <span class="bu">°C</span>
+        <span style="font-size:9px;letter-spacing:1px;color:rgba(255,179,0,.7);margin-left:6px" id="tmp-diode-tf">-- °F</span>
+      </div>
+      <div class="bl">DIODE D3 TEMPERATURE</div>
+      <div class="gb" style="margin:3px 0 5px"><div class="gf" id="gf-diode" style="width:50%"></div></div>
+
+      <div class="sr"><span class="sl">Δ MS5611 − IHU</span><span class="sv" id="dt">-- °C</span></div>
       <div class="sr"><span class="sl">BOARD HEALTH</span><span class="sv gn" id="st-b">NOMINAL ✓</span></div>
       <div class="sr"><span class="sl">DIODE STATUS</span><span class="sv gn" id="st-d">OPERATIONAL</span></div>
 
-      <div style="margin-top:8px;padding-top:7px;border-top:1px solid rgba(0,212,255,.08)">
+      <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,212,255,.08)">
         <div class="sr"><span class="sl">PACKET #</span><span class="sv" id="pkt-n">0</span></div>
         <div class="sr"><span class="sl">RF SIGNAL</span><span class="sv gn" id="rf-s">▮▮▮▯▯</span></div>
         <div class="sr"><span class="sl">SAT ID</span><span class="sv">KD9SAT-11</span></div>
@@ -168,8 +176,8 @@
       </div>
 
       <div class="spwrap">
-        <div class="splbl">DIODE TEMP — 60 SAMPLES</div>
-        <canvas class="sp" id="sp-tmp" height="32"></canvas>
+        <div class="splbl">IHU TEMP — 60 SAMPLES</div>
+        <canvas class="sp" id="sp-tmp" height="28"></canvas>
       </div>
     </div>
 
@@ -184,6 +192,17 @@
     <div class="pnl" style="grid-column:3;grid-row:1/3">
       <div class="hud-tl"></div><div class="hud-tr"></div><div class="hud-bl"></div><div class="hud-br"></div>
       <div class="pt"><span class="status-led"></span> MPU6050 <span class="chip">IMU</span></div>
+
+      <!-- Attitude indicator -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <canvas id="attitude-canvas" width="120" height="120" style="flex-shrink:0"></canvas>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div class="sr"><span class="sl">ROLL</span><span class="sv yw" id="att-roll">—</span></div>
+          <div class="sr"><span class="sl">PITCH</span><span class="sv yw" id="att-pitch">—</span></div>
+          <div class="sr"><span class="sl">YAW</span><span class="sv yw" id="att-yaw">—</span></div>
+        </div>
+      </div>
+
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:8px;letter-spacing:2px;color:var(--white-dd);margin-bottom:3px">GYROSCOPE — deg/s</div>
       <div class="imgrid">
         <div class="icell"><div class="ic-l">GX</div><div class="ic-v" id="ic-gx">-.-<span class="icu"> °/s</span></div></div>
@@ -296,6 +315,7 @@
 <audio id="snd-connected" preload="auto"><source src="Sound Effects/Connected.mp3" type="audio/mpeg"></audio>
 
 <!-- Dashboard pulls telemetry from Adafruit IO only (push_to_aio.py on CubeSat) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.0.5/mqtt.min.js"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
 </body>

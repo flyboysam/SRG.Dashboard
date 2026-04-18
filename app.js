@@ -28,6 +28,12 @@ const MQTT_TOPIC  = 'cubesatsim/telemetry';
 let mqttClient = null;
 let mqttConnected = false;
 let mqttFrame = null;
+let mqttFrameId = 0;
+let lastProcessedFrameId = -1;
+
+// ═══════════════ ATTITUDE STATE ═══════════════
+let imuYaw = 0;
+let attRoll = 0, attPitch = 0, attTargR = 0, attTargP = 0;
 
 // ═══════════════ USER STORE ═══════════════
 const DEF_USERS = [
@@ -113,6 +119,7 @@ function setupMQTT(){
       if(topic !== MQTT_TOPIC) return;
       try {
         mqttFrame = JSON.parse(payload.toString());
+        mqttFrameId++;
       } catch(e) {
         tlog('MQTT PARSE ERROR','terr');
       }
@@ -362,7 +369,7 @@ async function addUser(){
 }
 
 // ═══════════════ DASHBOARD ENGINE ═══════════════
-let timers=[],tHist=[],tmpHist=[],aHist=[],frames=0,pkts=0,sesStart=0;
+let timers=[],tHist=[],tmpHist=[],diodeHist=[],aHist=[],frames=0,pkts=0,sesStart=0;
 const SIGS=['▯▯▯▯▯','▮▯▯▯▯','▮▮▯▯▯','▮▮▮▯▯','▮▮▮▮▯','▮▮▮▮▮'];
 
 async function startDash(){
@@ -412,9 +419,10 @@ async function startDash(){
 function stopDash(){
   timers.forEach(clearInterval);timers=[];
   timers=[];
-  tHist=[];tmpHist=[];aHist=[];frames=0;pkts=0;
+  tHist=[];tmpHist=[];diodeHist=[];aHist=[];frames=0;pkts=0;
   connectionSoundPlayed=false;
-  mqttFrame=null;
+  mqttFrame=null; mqttFrameId=0; lastProcessedFrameId=-1;
+  imuYaw=0; attRoll=0; attPitch=0; attTargR=0; attTargP=0;
   // Keep mqttClient alive across logout so re-login is instant;
   // only reset state so the next startDash() re-evaluates the connection
   dataMode='sim';
@@ -536,7 +544,7 @@ function tickMET(){
 async function tickTel(){
   let temp, press, altCalc, tmp;
   let gx=null, gy=null, gz=null, ax=null, ay=null, az=null;
-  let cpuUsage=null, battery=null;
+  let cpuUsage=null, battery=null, diodeTemp=null;
   let source = 'sim';
 
   // MQTT / HiveMQ — immediate frame from cubesatsim/telemetry
@@ -545,7 +553,8 @@ async function tickTel(){
       const pFloat=(v)=>v!=null&&v!==''&&!isNaN(parseFloat(v))?+parseFloat(v):null;
       const t = pFloat(mqttFrame.temp_ms ?? mqttFrame.temp ?? mqttFrame.temperature);
       const p = pFloat(mqttFrame.pres_ms ?? mqttFrame.pres ?? mqttFrame.pressure);
-      const piTemp = pFloat(mqttFrame.temp_tmp ?? mqttFrame.tmp ?? mqttFrame.temp_diode);
+      const piTemp = pFloat(mqttFrame.temp_tmp ?? mqttFrame.temp_pi ?? mqttFrame.tmp);
+      const diodeRaw = pFloat(mqttFrame.temp_diode ?? mqttFrame.diode ?? mqttFrame.d3);
       const cpuRaw = pFloat(mqttFrame.cpuUsage ?? mqttFrame.cpu ?? mqttFrame['cpu-usage'] ?? mqttFrame.cpu_usage);
       const batRaw = pFloat(mqttFrame.battery ?? mqttFrame.voltage ?? mqttFrame.volt ?? mqttFrame.bat);
       cpuUsage = cpuRaw;
@@ -556,8 +565,23 @@ async function tickTel(){
         temp = t; press = p;
         altCalc = +(44330*(1-Math.pow(press/1013.25,1/5.255))).toFixed(1);
         tmp = piTemp!=null ? piTemp : temp;
+        if(diodeRaw!=null) diodeTemp = diodeRaw;
         source='live'; liveFailCount=0;
         if(!connectionSoundPlayed){ playConnectionSound(); connectionSoundPlayed=true; }
+      }
+      // Attitude — only integrate yaw once per new MQTT frame
+      if(ax!=null && ay!=null && az!=null){
+        const _ax=ax||0, _ay=ay||0, _az=az||1;
+        const roll  = Math.atan2(_ay, _az) * 180 / Math.PI;
+        const pitch = Math.atan2(-_ax, Math.sqrt(_ay*_ay + _az*_az)) * 180 / Math.PI;
+        if(lastProcessedFrameId !== mqttFrameId){
+          if(Math.abs(gz||0) > 0.8) imuYaw += (gz||0) * 0.3;
+          lastProcessedFrameId = mqttFrameId;
+        }
+        attTargR = roll; attTargP = pitch;
+        set('att-roll',  roll.toFixed(1)  + '°');
+        set('att-pitch', pitch.toFixed(1) + '°');
+        set('att-yaw',   (((imuYaw % 360) + 360) % 360).toFixed(1) + '°');
       }
     } catch(err){
       liveFailCount++;
@@ -643,6 +667,10 @@ async function tickTel(){
   set('tmp-v', tmp!=null ? tmp.toFixed(1) : '--.-');
   set('tmp-tf', tmp!=null ? ((tmp*9/5)+32).toFixed(1)+' °F' : '-- °F');
   gb('gf-tmp', tmp!=null ? ((tmp-10)/40)*100 : 0);
+  const diodeVal=(diodeTemp!=null&&!isNaN(diodeTemp))?+diodeTemp:null;
+  set('tmp-diode-v', diodeVal!=null ? diodeVal.toFixed(1) : '--.-');
+  set('tmp-diode-tf', diodeVal!=null ? ((diodeVal*9/5)+32).toFixed(1)+' °F' : '-- °F');
+  gb('gf-diode', diodeVal!=null ? ((diodeVal-10)/40)*100 : 0);
   const deltaVal=(temp!=null&&tmp!=null) ? (temp-tmp) : null;
   set('dt', deltaVal!=null ? ((deltaVal>=0?'+':'')+deltaVal.toFixed(1)+' °C') : '--.- °C');
   set('st-b',hasData?'NOMINAL ✓':'NO DATA'); setcl('st-b','sv '+(hasData?'gn':'mt'));
@@ -678,10 +706,10 @@ async function tickTel(){
   document.getElementById('rawstr').innerHTML=`RAW › <span>${raw}</span>`;
 
   if(hasData){
-    push(tHist,temp,60); push(tmpHist,tmp,60); if(am!=null) push(aHist,am,60);
+    push(tHist,temp,60); push(tmpHist,tmp,60); if(diodeVal!=null) push(diodeHist,diodeVal,60); if(am!=null) push(aHist,am,60);
     lastRecordedData={
       timestamp:new Date().toISOString(),
-      temp,press,altCalc,tmp,gx,gy,gz,ax,ay,az,
+      temp,press,altCalc,tmp,diodeTemp:diodeVal,gx,gy,gz,ax,ay,az,
       gm,am,cpuUsage:typeof cpuUsage==='number'?cpuUsage:null,
       battery:typeof battery==='number'?battery:null,
       packetCount:pkts,frameCount:frames
@@ -692,7 +720,7 @@ async function tickTel(){
   drawSpark('sp-tmp',tmpHist,'rgba(255,193,7,.85)','rgba(255,193,7,.06)');
   drawSpark('sp-a',aHist,'rgba(79,195,247,.75)','rgba(79,195,247,.05)');
 
-  if(hasData&&frames%4===0) tlog(`PKT#${pkts} MS5611:[T:${temp}°C P:${press}hPa] MPU:[GY:${fmt(gx)},${fmt(gy)},${fmt(gz)}] TMP:${tmp}°C`,'tok');
+  if(hasData&&frames%4===0) tlog(`PKT#${pkts} MS5611:[T:${temp}°C P:${press}hPa] MPU:[GY:${fmt(gx)},${fmt(gy)},${fmt(gz)}] IHU:${fmt(tmp)}°C D3:${diodeVal!=null?fmt(diodeVal):'--'}°C`,'tok');
   if(hasData&&frames%30===0) tlog('FRAME SYNC OK — APRS CRC VERIFIED','tsys');
 }
 
@@ -748,6 +776,101 @@ function drawSpark(id,data,stroke,fill){
   ctx.fillStyle=stroke;ctx.fill();
 }
 
+// ═══════════════ ATTITUDE INDICATOR ═══════════════
+const _attCanvas = document.getElementById('attitude-canvas');
+const _attCtx    = _attCanvas ? _attCanvas.getContext('2d') : null;
+const _AW = _attCanvas ? _attCanvas.width  : 120;
+const _AH = _attCanvas ? _attCanvas.height : 120;
+const _AR = _AW / 2 - 6;
+
+function drawAttitude(roll, pitch){
+  if(!_attCtx) return;
+  _attCtx.clearRect(0,0,_AW,_AH);
+  _attCtx.save();
+  _attCtx.beginPath();
+  _attCtx.arc(_AW/2,_AH/2,_AR,0,Math.PI*2);
+  _attCtx.clip();
+
+  _attCtx.save();
+  _attCtx.translate(_AW/2,_AH/2);
+  _attCtx.rotate(-roll*Math.PI/180);
+  const po=pitch*1.3;
+
+  // Sky
+  _attCtx.fillStyle='#1A4A8A';
+  _attCtx.fillRect(-_AR,-_AR-po,_AR*2,_AR+po);
+  // Ground
+  _attCtx.fillStyle='#5C3D0F';
+  _attCtx.fillRect(-_AR,-po,_AR*2,_AR+po);
+  // Horizon line
+  _attCtx.strokeStyle='rgba(255,255,255,.9)';
+  _attCtx.lineWidth=1.5;
+  _attCtx.beginPath();
+  _attCtx.moveTo(-_AR,-po);_attCtx.lineTo(_AR,-po);
+  _attCtx.stroke();
+  // Pitch lines
+  _attCtx.strokeStyle='rgba(255,255,255,.4)';
+  _attCtx.lineWidth=1;
+  _attCtx.font='9px monospace';
+  _attCtx.fillStyle='rgba(255,255,255,.5)';
+  for(const d of [-20,-10,10,20]){
+    const y=-po-d*1.3, lw=d%20===0?_AR/3:_AR/5;
+    _attCtx.beginPath();_attCtx.moveTo(-lw,y);_attCtx.lineTo(lw,y);_attCtx.stroke();
+    _attCtx.fillText(Math.abs(d),lw+3,y+3);
+  }
+  _attCtx.restore();
+
+  // Outer ring
+  _attCtx.restore();
+  _attCtx.strokeStyle='#1A3050';
+  _attCtx.lineWidth=2;
+  _attCtx.beginPath();
+  _attCtx.arc(_AW/2,_AH/2,_AR,0,Math.PI*2);
+  _attCtx.stroke();
+
+  // Roll ticks
+  _attCtx.save();
+  _attCtx.translate(_AW/2,_AH/2);
+  for(const a of [-60,-45,-30,-20,-10,0,10,20,30,45,60]){
+    _attCtx.save();
+    _attCtx.rotate(a*Math.PI/180);
+    _attCtx.strokeStyle='rgba(255,255,255,.35)';
+    _attCtx.lineWidth=1;
+    const tk=a%30===0?7:4;
+    _attCtx.beginPath();_attCtx.moveTo(0,-(_AR-1));_attCtx.lineTo(0,-(_AR-1-tk));
+    _attCtx.stroke();
+    _attCtx.restore();
+  }
+  // Roll pointer (yellow triangle)
+  _attCtx.rotate(-roll*Math.PI/180);
+  _attCtx.fillStyle='#FFD60A';
+  _attCtx.beginPath();
+  _attCtx.moveTo(0,-(_AR-14));_attCtx.lineTo(-5,-(_AR-5));_attCtx.lineTo(5,-(_AR-5));
+  _attCtx.closePath();_attCtx.fill();
+  _attCtx.restore();
+
+  // Aircraft symbol
+  _attCtx.strokeStyle='#FFD60A';
+  _attCtx.lineWidth=2.5;
+  _attCtx.lineCap='round';
+  const hs=_AR/3;
+  _attCtx.beginPath();
+  _attCtx.moveTo(_AW/2-hs*2,_AH/2);_attCtx.lineTo(_AW/2-hs,_AH/2);
+  _attCtx.moveTo(_AW/2+hs,_AH/2);  _attCtx.lineTo(_AW/2+hs*2,_AH/2);
+  _attCtx.moveTo(_AW/2,_AH/2-hs/2);_attCtx.lineTo(_AW/2,_AH/2+hs/2);
+  _attCtx.stroke();
+  _attCtx.fillStyle='#FFD60A';
+  _attCtx.beginPath();_attCtx.arc(_AW/2,_AH/2,3,0,Math.PI*2);_attCtx.fill();
+}
+
+function animateAttitude(){
+  attRoll  += (attTargR-attRoll)  * 0.1;
+  attPitch += (attTargP-attPitch) * 0.1;
+  drawAttitude(attRoll, attPitch);
+  requestAnimationFrame(animateAttitude);
+}
+animateAttitude();
+
 function renderDataLog(){
   const el=document.getElementById('datalog-content');
   if(!el)return;
@@ -776,8 +899,9 @@ function renderDataLog(){
         <div class="datalog-row"><span>Altitude (baro)</span><span>${fmt(d.altCalc)} m</span></div>
       </div>
       <div class="datalog-section">
-        <div class="datalog-section-title">THERMAL DIODE (TMP)</div>
-        <div class="datalog-row"><span>Board Temp</span><span>${fmt(d.tmp)} °C</span></div>
+        <div class="datalog-section-title">THERMAL SENSORS</div>
+        <div class="datalog-row"><span>Pi IHU Temp</span><span>${fmt(d.tmp)} °C</span></div>
+        <div class="datalog-row"><span>Diode D3 Temp</span><span>${d.diodeTemp!=null?fmt(d.diodeTemp):'--'} °C</span></div>
       </div>
       <div class="datalog-section">
         <div class="datalog-section-title">MPU6050 GYROSCOPE</div>
