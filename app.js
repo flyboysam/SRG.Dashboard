@@ -25,11 +25,14 @@ const DATA_MAX_AGE_MS = 180000;  // 3 min — Adafruit updates ~1.5–2 min
 // ═══════════════ MQTT / HIVEMQ ═══════════════
 const MQTT_BROKER = 'wss://broker.hivemq.com:8884/mqtt';
 const MQTT_TOPIC  = 'cubesatsim/telemetry';
+const MQTT_STALE_MS = 15000;  // satellite considered offline after 15 s with no frames
 let mqttClient = null;
 let mqttConnected = false;
 let mqttFrame = null;
 let mqttFrameId = 0;
 let lastProcessedFrameId = -1;
+let mqttLastFrameTime = 0;
+let satOfflineSoundPlayed = false;
 
 // ═══════════════ ATTITUDE STATE ═══════════════
 let imuYaw = 0;
@@ -120,6 +123,8 @@ function setupMQTT(){
       try {
         mqttFrame = JSON.parse(payload.toString());
         mqttFrameId++;
+        mqttLastFrameTime = Date.now();
+        satOfflineSoundPlayed = false;  // reset so connect sound re-fires on next tick
       } catch(e) {
         tlog('MQTT PARSE ERROR','terr');
       }
@@ -420,8 +425,8 @@ function stopDash(){
   timers.forEach(clearInterval);timers=[];
   timers=[];
   tHist=[];tmpHist=[];diodeHist=[];aHist=[];frames=0;pkts=0;
-  connectionSoundPlayed=false;
-  mqttFrame=null; mqttFrameId=0; lastProcessedFrameId=-1;
+  connectionSoundPlayed=false; satOfflineSoundPlayed=false;
+  mqttFrame=null; mqttFrameId=0; lastProcessedFrameId=-1; mqttLastFrameTime=0;
   imuYaw=0; attRoll=0; attPitch=0; attTargR=0; attTargP=0;
   // Keep mqttClient alive across logout so re-login is instant;
   // only reset state so the next startDash() re-evaluates the connection
@@ -437,8 +442,8 @@ function updateModeIndicator(offline){
     return;
   }
   if(dataMode==='live'){
-    el.textContent='LIVE';
-    el.className='data-mode live';
+    el.textContent=offline?'SAT OFFLINE':'LIVE';
+    el.className='data-mode '+(offline?'offline':'live');
   } else if(dataMode==='cloud'){
     el.textContent='CLOUD';
     el.className='data-mode cloud';
@@ -548,7 +553,17 @@ async function tickTel(){
   let source = 'sim';
 
   // MQTT / HiveMQ — immediate frame from cubesatsim/telemetry
-  if(source==='sim' && dataMode==='live' && mqttFrame){
+  // Detect satellite going offline: broker connected but no frames for MQTT_STALE_MS
+  if(dataMode==='live' && mqttLastFrameTime > 0 && (Date.now()-mqttLastFrameTime) > MQTT_STALE_MS){
+    if(!satOfflineSoundPlayed){
+      satOfflineSoundPlayed = true;
+      connectionSoundPlayed = false;  // allow connect sound to re-fire when satellite comes back
+      tlog('SAT OFFLINE — NO FRAMES RECEIVED','terr');
+      updateModeIndicator(true);
+      playConnectionFailedSound();
+    }
+    // fall through — mqttFrame is stale, source stays 'sim', displays will show no-data
+  } else if(source==='sim' && dataMode==='live' && mqttFrame){
     try {
       const pFloat=(v)=>v!=null&&v!==''&&!isNaN(parseFloat(v))?+parseFloat(v):null;
       const t = pFloat(mqttFrame.temp_ms ?? mqttFrame.temp ?? mqttFrame.temperature);
@@ -567,7 +582,7 @@ async function tickTel(){
         tmp = piTemp!=null ? piTemp : temp;
         if(diodeRaw!=null) diodeTemp = diodeRaw;
         source='live'; liveFailCount=0;
-        if(!connectionSoundPlayed){ playConnectionSound(); connectionSoundPlayed=true; }
+        if(!connectionSoundPlayed){ playConnectionSound(); connectionSoundPlayed=true; updateModeIndicator(false); }
       }
       // Attitude — only integrate yaw once per new MQTT frame
       if(ax!=null && ay!=null && az!=null){
