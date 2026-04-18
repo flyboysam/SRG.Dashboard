@@ -590,10 +590,13 @@ async function tickTel(){
         const roll  = Math.atan2(_ay, _az) * 180 / Math.PI;
         const pitch = Math.atan2(-_ax, Math.sqrt(_ay*_ay + _az*_az)) * 180 / Math.PI;
         if(lastProcessedFrameId !== mqttFrameId){
-          if(Math.abs(gz||0) > 0.8) imuYaw += (gz||0) * 0.3;
+          // Dead zone: MPU6050 at rest produces ~0.5–2 °/s noise; ignore below 3 °/s
+          if(Math.abs(gz||0) > 3.0) imuYaw += (gz||0) * 0.3;
           lastProcessedFrameId = mqttFrameId;
         }
-        attTargR = roll; attTargP = pitch;
+        // Only update attitude target if change exceeds 0.5° to filter accel noise jitter
+        if(Math.abs(roll  - attTargR) > 0.5) attTargR = roll;
+        if(Math.abs(pitch - attTargP) > 0.5) attTargP = pitch;
         set('att-roll',  roll.toFixed(1)  + '°');
         set('att-pitch', pitch.toFixed(1) + '°');
         set('att-yaw',   (((imuYaw % 360) + 360) % 360).toFixed(1) + '°');
