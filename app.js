@@ -374,7 +374,8 @@ async function addUser(){
 }
 
 // ═══════════════ DASHBOARD ENGINE ═══════════════
-let timers=[],tHist=[],tmpHist=[],diodeHist=[],aHist=[],frames=0,pkts=0,sesStart=0;
+let timers=[],tHist=[],tmpHist=[],diodeHist=[],aHist=[],batHistory=[],frames=0,pkts=0,sesStart=0;
+const BAT_MIN=3.5, BAT_MAX=4.5;
 const SIGS=['▯▯▯▯▯','▮▯▯▯▯','▮▮▯▯▯','▮▮▮▯▯','▮▮▮▮▯','▮▮▮▮▮'];
 
 async function startDash(){
@@ -424,7 +425,7 @@ async function startDash(){
 function stopDash(){
   timers.forEach(clearInterval);timers=[];
   timers=[];
-  tHist=[];tmpHist=[];diodeHist=[];aHist=[];frames=0;pkts=0;
+  tHist=[];tmpHist=[];diodeHist=[];aHist=[];batHistory=[];frames=0;pkts=0;
   connectionSoundPlayed=false; satOfflineSoundPlayed=false;
   mqttFrame=null; mqttFrameId=0; lastProcessedFrameId=-1; mqttLastFrameTime=0;
   imuYaw=0; attRoll=0; attPitch=0; attTargR=0; attTargP=0;
@@ -706,11 +707,35 @@ async function tickTel(){
   set('cpu-v', cpuVal!=null?cpuVal.toFixed(1):'--');
   gb('gf-cpu', cpuVal!=null?Math.min(100,Math.max(0,cpuVal)):0);
   set('bat-v', batVal!=null?batVal.toFixed(2):'--.--');
-  gb('gf-bat', batVal!=null?Math.min(100,Math.max(0,((batVal-3.5)/1)*100)):50);
-  const batOk=batVal!=null&&batVal>=3.5&&batVal<=4.5;
-  const batStatus=batVal!=null?(batOk?'NOMINAL':(batVal>4.5?'OVERVOLT':'LOW')):'----';
+  const batPct=batVal!=null?Math.min(100,Math.max(0,((batVal-BAT_MIN)/(BAT_MAX-BAT_MIN))*100)):null;
+  gb('gf-bat', batPct!=null?batPct:50);
+  set('bat-pct', batPct!=null?Math.round(batPct).toString():'--');
+  const batOk=batVal!=null&&batVal>=BAT_MIN&&batVal<=BAT_MAX;
+  const batStatus=batVal!=null?(batOk?'NOMINAL':(batVal>BAT_MAX?'OVERVOLT':'LOW')):'----';
   set('bat-st', batStatus);
   setcl('bat-st','sv '+(batOk?'gn':'rd'));
+
+  // Track battery history for rate/ETA calculation
+  if(batVal!=null){ batHistory.push({v:batVal,t:Date.now()}); if(batHistory.length>60)batHistory.shift(); }
+  let batRate=null, batEta=null;
+  if(batHistory.length>=5){
+    const oldest=batHistory[0], newest=batHistory[batHistory.length-1];
+    const dtMin=(newest.t-oldest.t)/60000;
+    if(dtMin>=0.5){ // require at least 30s of history
+      const dvPct=((newest.v-oldest.v)/(BAT_MAX-BAT_MIN))*100;
+      batRate=dvPct/dtMin; // %/min
+      if(batPct!=null){
+        if(batRate>0.05){ const m=(100-batPct)/batRate; batEta=`~${fmtEta(m)} → FULL`; }
+        else if(batRate<-0.05){ const m=batPct/Math.abs(batRate); batEta=`~${fmtEta(m)} → EMPTY`; }
+        else batEta='STABLE';
+      }
+    }
+  }
+  set('bat-rate', batRate!=null?`${batRate>=0?'+':''}${batRate.toFixed(2)} %/min`:'-- %/min');
+  const rateEl=document.getElementById('bat-rate');
+  if(rateEl) rateEl.className='sv '+(batRate==null?'mt':batRate>0.05?'gn':batRate<-0.05?'rd':'yw');
+  set('bat-eta', batEta||'----');
+  setcl('bat-eta','sv cy');
   set('gyro-gx',gx!=null?gx.toFixed(2):'-.-'); set('gyro-gy',gy!=null?gy.toFixed(2):'-.-');
   set('gyro-gz',gz!=null?gz.toFixed(2):'-.-'); set('gyro-gm',gm!=null?gm.toFixed(2):'-.-');
 
@@ -757,6 +782,7 @@ function statEl(id,ok,okTxt,badTxt){
   e.className='sv '+(noData?'mt':(ok?'gn':'rd'));
 }
 function push(a,v,mx){a.push(v);if(a.length>mx)a.shift();}
+function fmtEta(mins){if(mins<1)return '<1 min';if(mins<60)return `${Math.round(mins)} min`;const h=Math.floor(mins/60),m=Math.round(mins%60);return `${h}h ${m}m`;}
 
 function drawSpark(id,data,stroke,fill){
   const c=document.getElementById(id);if(!c||data.length<2)return;

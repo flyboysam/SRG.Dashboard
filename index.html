@@ -228,12 +228,16 @@
       <div class="pnl pnl-sys pnl-gold" style="flex:1;min-width:160px">
         <div class="hud-tl"></div><div class="hud-tr"></div><div class="hud-bl"></div><div class="hud-br"></div>
         <div class="pt"><span class="status-led"></span> BATTERY <span class="chip">POWER</span></div>
-        <div class="bv yw" id="bat-v">--.--</div>
-        <span class="bu">V</span>
-        <div class="bl">SAT BUS VOLTAGE</div>
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <div class="bv yw" id="bat-v">--.--</div><span class="bu">V</span>
+          <div class="bv" id="bat-pct" style="font-size:20px;color:rgba(255,215,10,.85)">--</div><span class="bu">%</span>
+        </div>
+        <div class="bl">SAT BUS VOLTAGE · STATE OF CHARGE</div>
         <div class="gb" style="margin:3px 0 7px"><div class="gf yw" id="gf-bat" style="width:50%"></div></div>
         <div class="sr" style="margin-top:4px"><span class="sl">CURRENT</span><span class="sv cy" id="bat-cur">--.- A</span></div>
         <div class="sr"><span class="sl">STATUS</span><span class="sv" id="bat-st">----</span></div>
+        <div class="sr"><span class="sl">CHARGE RATE</span><span class="sv mt" id="bat-rate">-- %/min</span></div>
+        <div class="sr"><span class="sl">ETA</span><span class="sv cy" id="bat-eta">----</span></div>
       </div>
       <div class="pnl pnl-sys pnl-gold" style="flex:1;min-width:160px">
         <div class="hud-tl"></div><div class="hud-tr"></div><div class="hud-bl"></div><div class="hud-br"></div>
