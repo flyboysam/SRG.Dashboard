@@ -261,9 +261,10 @@ html, body {
 .splbl { font-family:'Barlow Condensed',sans-serif; font-weight:600; font-size:8px; letter-spacing:1.5px; color:var(--text-faint); margin-bottom:4px; text-transform:uppercase; }
 canvas.sp { display:block; width:100%; height:32px; }
 
-/* Telem log */
+/* Terminal — event log + interactive command console share one scrolling pane */
+.term-body { display:flex; flex-direction:column; flex:1; min-height:0; }
 .tlog {
-  height:100%; overflow-y:auto;
+  flex:1; min-height:0; overflow-y:auto;
   font-family:'JetBrains Mono',monospace; font-size:10.5px; line-height:1.85;
   color:var(--text-dim);
 }
@@ -273,12 +274,43 @@ canvas.sp { display:block; width:100%; height:32px; }
 .tlog::-webkit-scrollbar-thumb:hover { background:var(--cyan-dim); }
 .tr2 { display:flex; gap:10px; padding:2px 4px; }
 .tr2:hover { background:rgba(255,255,255,.02); }
+.tr2-plain { padding-left:4px; }
 .tts { color:var(--text-faint); flex-shrink:0; }
 .tok { color:var(--green); }
 .tinf { color:var(--cyan); }
 .twn { color:var(--amber); }
 .terr { color:var(--red); }
 .tsys { color:var(--text-faint); }
+.tcmd { color:var(--text); font-weight:600; }
+.tcmd-hint { color:var(--cyan); font-weight:600; }
+.tresp { color:var(--text-dim); white-space:pre-wrap; }
+
+/* Response provenance tags — always shown so a reading is never mistaken for real vs. simulated */
+.ttag-mock { color:var(--violet); font-weight:700; letter-spacing:1px; }
+.ttag-local { color:var(--cyan); font-weight:700; letter-spacing:1px; }
+.ttag-error { color:var(--red); font-weight:700; letter-spacing:1px; }
+.ttag-transmitted { color:var(--amber); font-weight:700; letter-spacing:1px; }
+.ttag-received { color:var(--green); font-weight:700; letter-spacing:1px; }
+
+/* Command input row */
+.term-inputrow {
+  display:flex; align-items:center; gap:8px; flex-shrink:0;
+  padding:8px 4px 2px; margin-top:4px; border-top:1px solid var(--border);
+  font-family:'JetBrains Mono',monospace; font-size:11px;
+}
+.term-prompt { color:var(--cyan); font-weight:700; flex-shrink:0; user-select:none; }
+.term-input {
+  flex:1; min-width:0; background:transparent; border:none; outline:none;
+  color:var(--text); font:inherit; caret-color:var(--cyan); padding:2px 0;
+}
+.term-input::placeholder { color:var(--text-faint); }
+.term-input.pending { color:var(--amber); }
+.term-input.pending::placeholder { color:var(--amber-dim); }
+
+/* Terminal header chip — reflects whether responses are backed by real or mock data.
+   (Scoped as .pt .chip.modifier so it outranks the base ".pt .chip" amber default.) */
+.pt .chip.chip-local { background:rgba(79,195,247,.1); border-color:rgba(79,195,247,.35); color:var(--cyan); }
+.pt .chip.chip-mock { background:rgba(167,139,250,.1); border-color:rgba(167,139,250,.35); color:var(--violet); }
 
 /* Bottom bar */
 .bbar {

@@ -22,6 +22,21 @@ let lastRecordedData = null;  // { timestamp, temp, press, altCalc, tmp, gx, gy,
 const LIVE_FAIL_MAX = 3;
 let connectionSoundPlayed = false;
 
+// ═══════════════ TELEMETRY STATE ═══════════════
+// Single shared snapshot of "what the ground station currently knows," refreshed
+// every tick in tickTel(). This is the one thing the terminal's command backend
+// is allowed to read — it never reaches into DOM elements or tickTel() internals.
+let telemetryState = {
+  hasData:false, dataMode:'sim', source:'sim',
+  temp:null, press:null, altCalc:null, tmp:null, diodeTemp:null,
+  gx:null, gy:null, gz:null, ax:null, ay:null, az:null, gm:null, am:null,
+  attRoll:0, attPitch:0, attYaw:0,
+  battery:null, batteryCurrent:null, batPct:null, batStatus:null, batRate:null, batEta:null,
+  cpuUsage:null,
+  frames:0, pkts:0, sesStart:0, lastPacketTime:null,
+};
+function getTelemetryState(){ return telemetryState; }
+
 function playConnectionSound(){
   try{
     const a=document.getElementById('snd-connected')||new Audio('Sound Effects/Connected.mp3');
@@ -90,6 +105,7 @@ function setConnState(state){
 
 function updateModeIndicator(offline){
   const el=document.getElementById('data-mode');
+  updateTermChip();
   if(dataMode==='test'){
     setConnState('test');
     if(el){ el.textContent='TEST DATA'; el.className='data-mode test'; }
@@ -139,6 +155,8 @@ async function startDash(){
   timers.push(setInterval(tickMET,1000));
   timers.push(setInterval(tickTel,1400));
   tickTel();
+
+  tprint('Type <span class="tcmd-hint">help</span> to view available commands.','tsys');
 }
 
 async function tryReconnect(){
@@ -183,6 +201,7 @@ function generateTestFrame(){
   const tmp=temp+2.5+Math.sin(t/6)*1.2;
   const diodeTemp=tmp-1.5+Math.sin(t/11)*0.8;
   const battery=3.9+Math.sin(t/40)*0.25;
+  const batteryCurrent=0.45+Math.sin(t/23)*0.15+(Math.random()-0.5)*0.03;
   const cpuUsage=35+Math.sin(t/17)*12+Math.random()*4;
   const gx=Math.sin(t/3)*8+(Math.random()-0.5)*1.5;
   const gy=Math.cos(t/4)*6+(Math.random()-0.5)*1.5;
@@ -190,7 +209,7 @@ function generateTestFrame(){
   const ax=Math.sin(t/6)*0.15+(Math.random()-0.5)*0.03;
   const ay=Math.cos(t/7)*0.12+(Math.random()-0.5)*0.03;
   const az=1+Math.sin(t/8)*0.05+(Math.random()-0.5)*0.02;
-  return {temp,press,tmp,diodeTemp,battery,cpuUsage,gx,gy,gz,ax,ay,az};
+  return {temp,press,tmp,diodeTemp,battery,batteryCurrent,cpuUsage,gx,gy,gz,ax,ay,az};
 }
 
 function updateTestBtn(){
@@ -261,7 +280,7 @@ function tickMET(){
 async function tickTel(){
   let temp, press, altCalc, tmp;
   let gx=null, gy=null, gz=null, ax=null, ay=null, az=null;
-  let cpuUsage=null, battery=null, diodeTemp=null;
+  let cpuUsage=null, battery=null, batteryCurrent=null, diodeTemp=null;
   let source = 'sim';
 
   // Test data — synthetic, smoothly-varying values so the UI can be verified with no real link
@@ -270,7 +289,7 @@ async function tickTel(){
     temp=f.temp; press=f.press;
     altCalc=+(44330*(1-Math.pow(press/1013.25,1/5.255))).toFixed(1);
     tmp=f.tmp; diodeTemp=f.diodeTemp;
-    battery=f.battery; cpuUsage=f.cpuUsage;
+    battery=f.battery; batteryCurrent=f.batteryCurrent; cpuUsage=f.cpuUsage;
     gx=f.gx; gy=f.gy; gz=f.gz; ax=f.ax; ay=f.ay; az=f.az;
     source='test';
   }
@@ -388,6 +407,9 @@ async function tickTel(){
   const batStatus=batVal!=null?(batOk?'NOMINAL':(batVal>BAT_MAX?'OVERVOLT':'LOW')):'NO DATA';
   set('bat-st', batStatus);
   setcl('bat-st','sv '+(batVal==null?'mt':batOk?'gn':'rd'));
+  const batCurVal=typeof batteryCurrent==='number'&&!isNaN(batteryCurrent)?batteryCurrent:null;
+  set('bat-cur', batCurVal!=null?batCurVal.toFixed(2)+' A':'0.0 A');
+  setcl('bat-cur','sv '+(batCurVal!=null?'cy':'mt'));
 
   // Track battery history for rate/ETA calculation — only while actually connected,
   // so a stale/frozen history doesn't keep reporting a fake rate after disconnect.
@@ -435,6 +457,7 @@ async function tickTel(){
       packetCount:pkts,frameCount:frames
     };
     renderDataLog();
+    telemetryState.lastPacketTime=Date.now();
   }
   drawSpark('sp-t',tHist,'rgba(79,195,247,.9)','rgba(79,195,247,.06)');
   drawSpark('sp-tmp',tmpHist,'rgba(255,193,7,.85)','rgba(255,193,7,.06)');
@@ -442,6 +465,22 @@ async function tickTel(){
 
   if(hasData&&frames%4===0) tlog(`PKT#${pkts} MS5611:[T:${temp}°C P:${press}hPa] MPU:[GY:${fmt(gx)},${fmt(gy)},${fmt(gz)}] IHU:${fmt(tmp)}°C D3:${diodeVal!=null?fmt(diodeVal):'--'}°C`,'tok');
   if(hasData&&frames%30===0) tlog('FRAME SYNC OK — APRS CRC VERIFIED','tsys');
+
+  // Refresh the shared telemetry snapshot — the terminal's command backend reads
+  // this, never the DOM or tickTel()'s locals directly.
+  telemetryState.hasData=hasData; telemetryState.dataMode=dataMode; telemetryState.source=source;
+  telemetryState.temp=temp; telemetryState.press=press; telemetryState.altCalc=altCalc;
+  telemetryState.tmp=tmp; telemetryState.diodeTemp=diodeVal;
+  telemetryState.gx=gx; telemetryState.gy=gy; telemetryState.gz=gz;
+  telemetryState.ax=ax; telemetryState.ay=ay; telemetryState.az=az;
+  telemetryState.gm=gm; telemetryState.am=am;
+  telemetryState.attRoll=attTargR; telemetryState.attPitch=attTargP;
+  telemetryState.attYaw=(((imuYaw%360)+360)%360);
+  telemetryState.battery=batVal; telemetryState.batteryCurrent=batCurVal;
+  telemetryState.batPct=batPct; telemetryState.batStatus=batStatus;
+  telemetryState.batRate=batRate; telemetryState.batEta=batEta;
+  telemetryState.cpuUsage=typeof cpuUsage==='number'&&!isNaN(cpuUsage)?cpuUsage:null;
+  telemetryState.frames=frames; telemetryState.pkts=pkts; telemetryState.sesStart=sesStart;
 }
 
 function imuCell(id,val,unit,isGn){
@@ -674,6 +713,32 @@ function tlog(msg,cls){
   r.innerHTML=`<span class="tts">[${ts}]</span><span class="${cls||''}">${msg}</span>`;
   el.appendChild(r);el.scrollTop=el.scrollHeight;
   if(++logN>150)el.removeChild(el.firstChild);
+}
+// Terminal output line with no timestamp gutter — used for command echoes and
+// command responses, which read better as plain terminal text than as log entries.
+function tprint(msg,cls){
+  const el=document.getElementById('tlog');if(!el)return;
+  const r=document.createElement('div');r.className='tr2 tr2-plain';
+  r.innerHTML=`<span class="${cls||''}">${msg}</span>`;
+  el.appendChild(r);el.scrollTop=el.scrollHeight;
+  if(++logN>150)el.removeChild(el.firstChild);
+}
+function clearTerminal(){
+  const el=document.getElementById('tlog');if(el)el.innerHTML='';
+  logN=0;
+}
+
+// ═══════════════ TERMINAL STATUS CHIP ═══════════════
+// Reflects, in the terminal panel's own header, whether command responses will be
+// backed by real cached telemetry (LOCAL) or synthetic data (MOCK) — see comm-backend.js.
+function updateTermChip(){
+  const chip=document.getElementById('term-chip');
+  if(!chip) return;
+  if(dataMode==='adafruit' && telemetryState.hasData){
+    chip.textContent='LOCAL'; chip.className='chip chip-local';
+  } else {
+    chip.textContent='MOCK'; chip.className='chip chip-mock';
+  }
 }
 
 // ═══════════════ BOOTSTRAP — DASHBOARD LOADS DIRECTLY, NO LOGIN GATE ═══════════════

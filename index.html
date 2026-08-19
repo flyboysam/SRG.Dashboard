@@ -117,11 +117,17 @@
       </div>
     </div>
 
-    <!-- CENTER: Telemetry Log (spans rows 1-2) -->
-    <div class="pnl" style="grid-column:2;grid-row:1/3;display:flex;flex-direction:column">
+    <!-- CENTER: Mission Terminal — interactive command console + live event log (spans rows 1-2) -->
+    <div class="pnl term-pnl" style="grid-column:2;grid-row:1/3;display:flex;flex-direction:column">
       <div class="hud-tl"></div><div class="hud-tr"></div><div class="hud-bl"></div><div class="hud-br"></div>
-      <div class="pt"><span class="status-led"></span> APRS TELEMETRY <span class="chip">LIVE STREAM</span></div>
-      <div class="tlog" id="tlog"></div>
+      <div class="pt"><span class="status-led"></span> MISSION TERMINAL <span class="chip chip-mock" id="term-chip">MOCK</span></div>
+      <div class="term-body" id="term-body">
+        <div class="tlog" id="tlog"></div>
+        <div class="term-inputrow">
+          <span class="term-prompt">CUBESAT-GS &gt;</span>
+          <input type="text" id="term-input" class="term-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="type &quot;help&quot; to begin">
+        </div>
+      </div>
     </div>
 
     <!-- RIGHT: MPU6050 IMU (spans rows 1-2) -->
@@ -223,5 +229,10 @@
 <!-- Telemetry source: Adafruit IO only (push_to_aio.py on CubeSat) -->
 <script src="config.js"></script>
 <script src="app.js"></script>
+<!-- Mission Terminal — layered command architecture (frontend / parser / handler / comm backend) -->
+<script src="comm-backend.js"></script>
+<script src="command-handler.js"></script>
+<script src="command-parser.js"></script>
+<script src="terminal.js"></script>
 </body>
 </html>
