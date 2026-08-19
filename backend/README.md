@@ -1,6 +1,8 @@
 # SRG Dashboard — Rust Backend
 
-Telemetry API server for the CubeSat mission control dashboard. Reads telemetry from `telem.txt` (CubeSat simulator output) and serves it as JSON. Also provides user management and auth endpoints compatible with the frontend.
+Telemetry API server for the CubeSat mission control dashboard. Reads telemetry from `telem.txt` (CubeSat simulator output) and serves it as JSON.
+
+> **Note:** the dashboard no longer has a login page, so the `/api/auth` and `/api/users*` endpoints below are legacy — nothing in `app.js` calls them anymore. They're left in place in case a future admin feature needs them, but they're inert as far as the current frontend is concerned.
 
 **Serves the dashboard** — when you run the backend, open **http://localhost:5050** in your browser. The dashboard and API are served from the same origin, avoiding CORS issues.
 
@@ -51,4 +53,4 @@ export TELEM_FILE=/home/pi/CubeSatSim/telem.txt
 
 ## Frontend Integration
 
-Add the backend URL to the dashboard’s data sources. In `app.js`, the `bases` array in `fetchUsersFromServer` and the telemetry fetch logic can include `http://localhost:5050` (or your Pi’s IP) so the dashboard pulls from this backend instead of Adafruit IO when available.
+The dashboard currently pulls telemetry from MQTT (HiveMQ) or Adafruit IO directly — it does not call `/api/telemetry` on this backend. To wire the dashboard to this backend instead, add a fetch against `/api/telemetry` (same-origin when served from `http://localhost:5050`, or your Pi's IP) into `tickTel()` in `app.js`.

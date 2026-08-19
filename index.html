@@ -10,68 +10,7 @@
 <body>
 
 <canvas id="sf"></canvas>
-<div class="scanlines"></div>
 <div class="vignette"></div>
-
-<!-- ════════ LOGIN (full page) ════════ -->
-<div id="login">
-  <div class="login-grid">
-    <svg viewBox="0 0 1440 900" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <pattern id="g1" width="36" height="36" patternUnits="userSpaceOnUse">
-          <path d="M36 0L0 0 0 36" fill="none" stroke="#4fc3f7" stroke-width=".25"/>
-        </pattern>
-        <pattern id="g2" width="48" height="48" patternUnits="userSpaceOnUse">
-          <path d="M0 48L48 0" fill="none" stroke="#ffc107" stroke-width=".2"/>
-        </pattern>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#g1)"/>
-      <rect width="100%" height="100%" fill="url(#g2)" opacity=".5"/>
-      <ellipse cx="720" cy="450" rx="280" ry="180" fill="none" stroke="#4fc3f7" stroke-width=".4" opacity=".4"/>
-      <ellipse cx="720" cy="450" rx="480" ry="320" fill="none" stroke="#ffc107" stroke-width=".25" opacity=".25"/>
-      <ellipse cx="720" cy="450" rx="140" ry="90" fill="none" stroke="#FC3D21" stroke-width=".3" opacity=".3"/>
-      <ellipse cx="720" cy="450" rx="380" ry="240" fill="none" stroke="#ffd740" stroke-width=".2" opacity=".15"/>
-      <line x1="720" y1="0" x2="720" y2="900" stroke="#4fc3f7" stroke-width=".25" opacity=".18"/>
-      <line x1="0" y1="450" x2="1440" y2="450" stroke="#ffc107" stroke-width=".2" opacity=".15"/>
-      <line x1="0" y1="0" x2="1440" y2="900" stroke="#4fc3f7" stroke-width=".12" opacity=".08"/>
-      <line x1="1440" y1="0" x2="0" y2="900" stroke="#ffc107" stroke-width=".12" opacity=".08"/>
-    </svg>
-  </div>
-
-  <div class="login-full">
-    <div class="login-left">
-      <div class="login-hdr">AMSAT // GROUND CONTROL TERMINAL — v2.4.1</div>
-      <div class="hero">
-        <pre class="sat-art"> *  .  *  .  *  .  *  .  *
-     _______[===]_______
- ===| ◉  MISSION CTRL ◉ |===
-     ‾‾‾‾‾‾‾[===]‾‾‾‾‾‾‾
- .  *  .  |       |  .  *  .</pre>
-        <h1>CUBESAT-SIM</h1>
-        <div class="sub">GROUND CONTROL // CUBESAT TELEMETRY</div>
-      </div>
-      <div id="boot"></div>
-    </div>
-    <div class="login-right">
-      <div class="login-form">
-        <div class="fld">
-          <label class="flbl">Operator Identifier</label>
-          <div class="irow"><span class="prm">›</span><input class="ti" id="uid" type="text" placeholder="KD9XXX" autocomplete="off" spellcheck="false"></div>
-        </div>
-        <div class="fld">
-          <label class="flbl">Access Code</label>
-          <div class="irow"><span class="prm">›</span><input class="ti" id="upw" type="password" placeholder="••••••••" autocomplete="off"></div>
-        </div>
-        <div id="lerr"></div>
-        <button class="lbtn" id="lbtn" onclick="doLogin()">[ AUTHENTICATE // ESTABLISH UPLINK ]</button>
-      </div>
-      <div class="login-ftr">
-        <div><span class="pdot" id="rf-dot"></span> UPLINK 435 MHz · DOWNLINK 434.9 MHz — <span id="rf-status">--</span></div>
-        <div id="lclk">--:--:-- UTC</div>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- ════════ DASHBOARD ════════ -->
 <div id="dash">
@@ -86,7 +25,7 @@
       <div class="nb-missionid">◈ SRG DASHBOARD</div>
       <div class="nb-meta">
         <div class="nb-meta-top" id="nb-meta-top">GROUND CONTROL STATION // LIVE TELEMETRY</div>
-        <div class="nb-meta-bot" id="nb-op">OPERATOR: --- // ROLE: ---</div>
+        <div class="nb-meta-bot">KD9SAT-11 · APRS / AFSK 1200Bd</div>
       </div>
     </div>
     <div class="nb-right">
@@ -102,13 +41,10 @@
       <div class="nstat"><span class="nv">435</span><span class="nl">↑ MHz</span></div>
       <div class="nstat"><span class="nv">434.9</span><span class="nl">↓ MHz</span></div>
       <div class="nb-div"></div>
-      <div class="nusr">
-        <span class="uico">◉</span>
-        <div><div class="unm" id="nu-name">---</div><div class="url2" id="nu-role">---</div></div>
-        <span id="nu-badge" class="badge-g">GUEST</span>
+      <div class="conn-status" id="conn-status" data-state="connecting">
+        <span class="conn-dot"></span>
+        <span class="conn-text" id="conn-text">CONNECTING…</span>
       </div>
-      <button class="nbtn pri" id="admin-btn" onclick="openAdmin()" style="display:none">⚙ ADMIN</button>
-      <button class="nbtn" onclick="doLogout()">LOGOUT</button>
     </div>
   </div>
 
@@ -120,22 +56,22 @@
       <div class="hud-tl"></div><div class="hud-tr"></div><div class="hud-bl"></div><div class="hud-br"></div>
       <div class="pt"><span class="status-led"></span> MS5611 <span class="chip">BAROMETRIC</span></div>
 
-      <div class="bv" id="ms-t">--.-</div>
+      <div class="bv" id="ms-t">0.0</div>
       <div style="display:flex;align-items:baseline;gap:4px;margin-top:1px">
         <span class="bu">°C</span>
-        <span style="font-size:9px;letter-spacing:1px;color:rgba(255,179,0,.7);margin-left:6px" id="ms-tf">-- °F</span>
+        <span style="font-size:9px;letter-spacing:1px;color:var(--text-faint);margin-left:6px" id="ms-tf">0.0 °F</span>
       </div>
       <div class="bl">TEMPERATURE</div>
-      <div class="gb" style="margin:3px 0 7px"><div class="gf" id="gf-t" style="width:50%"></div></div>
+      <div class="gb" style="margin:3px 0 7px"><div class="gf" id="gf-t" style="width:0%"></div></div>
 
-      <div class="sr"><span class="sl">PRESSURE</span><span class="sv cy" id="ms-p">---- hPa</span></div>
-      <div class="gb"><div class="gf cy" id="gf-p" style="width:50%"></div></div>
+      <div class="sr"><span class="sl">PRESSURE</span><span class="sv cy" id="ms-p">0.00 hPa</span></div>
+      <div class="gb"><div class="gf cy" id="gf-p" style="width:0%"></div></div>
 
-      <div class="sr" style="margin-top:3px"><span class="sl">ALT (BARO)</span><span class="sv" id="ms-a">--.-- m</span></div>
-      <div class="gb"><div class="gf" id="gf-a" style="width:50%"></div></div>
+      <div class="sr" style="margin-top:3px"><span class="sl">ALT (BARO)</span><span class="sv" id="ms-a">0.0 m</span></div>
+      <div class="gb"><div class="gf" id="gf-a" style="width:0%"></div></div>
 
-      <div class="sr" style="margin-top:5px"><span class="sl">TEMP STATUS</span><span class="sv gn" id="st-t">NOMINAL</span></div>
-      <div class="sr"><span class="sl">PRESS STATUS</span><span class="sv gn" id="st-p">NOMINAL</span></div>
+      <div class="sr" style="margin-top:5px"><span class="sl">TEMP STATUS</span><span class="sv mt" id="st-t">NO DATA</span></div>
+      <div class="sr"><span class="sl">PRESS STATUS</span><span class="sv mt" id="st-p">NO DATA</span></div>
 
       <div class="spwrap">
         <div class="splbl">TEMPERATURE — 60 SAMPLES</div>
@@ -148,29 +84,29 @@
       <div class="hud-tl"></div><div class="hud-tr"></div><div class="hud-bl"></div><div class="hud-br"></div>
       <div class="pt"><span class="status-led"></span> THERMAL <span class="chip">SENSORS</span></div>
 
-      <div class="bv cy" id="tmp-v">--.-</div>
+      <div class="bv cy" id="tmp-v">0.0</div>
       <div style="display:flex;align-items:baseline;gap:4px;margin-top:1px">
         <span class="bu">°C</span>
-        <span style="font-size:9px;letter-spacing:1px;color:rgba(255,179,0,.7);margin-left:6px" id="tmp-tf">-- °F</span>
+        <span style="font-size:9px;letter-spacing:1px;color:var(--text-faint);margin-left:6px" id="tmp-tf">0.0 °F</span>
       </div>
       <div class="bl">PI IHU TEMPERATURE</div>
-      <div class="gb" style="margin:3px 0 5px"><div class="gf cy" id="gf-tmp" style="width:50%"></div></div>
+      <div class="gb" style="margin:3px 0 5px"><div class="gf cy" id="gf-tmp" style="width:0%"></div></div>
 
-      <div class="bv" id="tmp-diode-v" style="font-size:22px;margin-top:5px">--.-</div>
+      <div class="bv" id="tmp-diode-v" style="font-size:22px;margin-top:5px">0.0</div>
       <div style="display:flex;align-items:baseline;gap:4px;margin-top:1px">
         <span class="bu">°C</span>
-        <span style="font-size:9px;letter-spacing:1px;color:rgba(255,179,0,.7);margin-left:6px" id="tmp-diode-tf">-- °F</span>
+        <span style="font-size:9px;letter-spacing:1px;color:var(--text-faint);margin-left:6px" id="tmp-diode-tf">0.0 °F</span>
       </div>
       <div class="bl">DIODE D3 TEMPERATURE</div>
-      <div class="gb" style="margin:3px 0 5px"><div class="gf" id="gf-diode" style="width:50%"></div></div>
+      <div class="gb" style="margin:3px 0 5px"><div class="gf" id="gf-diode" style="width:0%"></div></div>
 
-      <div class="sr"><span class="sl">Δ MS5611 − IHU</span><span class="sv" id="dt">-- °C</span></div>
-      <div class="sr"><span class="sl">BOARD HEALTH</span><span class="sv gn" id="st-b">NOMINAL ✓</span></div>
-      <div class="sr"><span class="sl">DIODE STATUS</span><span class="sv gn" id="st-d">OPERATIONAL</span></div>
+      <div class="sr"><span class="sl">Δ MS5611 − IHU</span><span class="sv" id="dt">0.0 °C</span></div>
+      <div class="sr"><span class="sl">BOARD HEALTH</span><span class="sv mt" id="st-b">NO DATA</span></div>
+      <div class="sr"><span class="sl">DIODE STATUS</span><span class="sv mt" id="st-d">NO DATA</span></div>
 
-      <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,212,255,.08)">
+      <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(150,178,214,.12)">
         <div class="sr"><span class="sl">PACKET #</span><span class="sv" id="pkt-n">0</span></div>
-        <div class="sr"><span class="sl">RF SIGNAL</span><span class="sv gn" id="rf-s">▮▮▮▯▯</span></div>
+        <div class="sr"><span class="sl">RF SIGNAL</span><span class="sv mt" id="rf-s">▯▯▯▯▯</span></div>
         <div class="sr"><span class="sl">SAT ID</span><span class="sv">KD9SAT-11</span></div>
         <div class="sr"><span class="sl">PROTOCOL</span><span class="sv cy">APRS / AFSK 1200Bd</span></div>
       </div>
@@ -197,25 +133,25 @@
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <canvas id="attitude-canvas" width="120" height="120" style="flex-shrink:0"></canvas>
         <div style="display:flex;flex-direction:column;gap:5px">
-          <div class="sr"><span class="sl">ROLL</span><span class="sv yw" id="att-roll">—</span></div>
-          <div class="sr"><span class="sl">PITCH</span><span class="sv yw" id="att-pitch">—</span></div>
-          <div class="sr"><span class="sl">YAW</span><span class="sv yw" id="att-yaw">—</span></div>
+          <div class="sr"><span class="sl">ROLL</span><span class="sv yw" id="att-roll">0.0°</span></div>
+          <div class="sr"><span class="sl">PITCH</span><span class="sv yw" id="att-pitch">0.0°</span></div>
+          <div class="sr"><span class="sl">YAW</span><span class="sv yw" id="att-yaw">0.0°</span></div>
         </div>
       </div>
 
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:8px;letter-spacing:2px;color:var(--white-dd);margin-bottom:3px">GYROSCOPE — deg/s</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:8px;letter-spacing:2px;color:var(--text-faint);margin-bottom:3px">GYROSCOPE — deg/s</div>
       <div class="imgrid">
-        <div class="icell"><div class="ic-l">GX</div><div class="ic-v" id="ic-gx">-.-<span class="icu"> °/s</span></div></div>
-        <div class="icell"><div class="ic-l">GY</div><div class="ic-v" id="ic-gy">-.-<span class="icu"> °/s</span></div></div>
-        <div class="icell"><div class="ic-l">GZ</div><div class="ic-v" id="ic-gz">-.-<span class="icu"> °/s</span></div></div>
-        <div class="icell"><div class="ic-l">|G| MAG</div><div class="ic-v" id="ic-gm">-.-<span class="icu"> °/s</span></div></div>
+        <div class="icell"><div class="ic-l">GX</div><div class="ic-v" id="ic-gx">0.00<span class="icu"> °/s</span></div></div>
+        <div class="icell"><div class="ic-l">GY</div><div class="ic-v" id="ic-gy">0.00<span class="icu"> °/s</span></div></div>
+        <div class="icell"><div class="ic-l">GZ</div><div class="ic-v" id="ic-gz">0.00<span class="icu"> °/s</span></div></div>
+        <div class="icell"><div class="ic-l">|G| MAG</div><div class="ic-v" id="ic-gm">0.00<span class="icu"> °/s</span></div></div>
       </div>
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:8px;letter-spacing:2px;color:var(--white-dd);margin:8px 0 3px">ACCELEROMETER — g</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:8px;letter-spacing:2px;color:var(--text-faint);margin:8px 0 3px">ACCELEROMETER — g</div>
       <div class="imgrid">
-        <div class="icell"><div class="ic-l">AX</div><div class="ic-v gn" id="ic-ax">-.-<span class="icu"> g</span></div></div>
-        <div class="icell"><div class="ic-l">AY</div><div class="ic-v gn" id="ic-ay">-.-<span class="icu"> g</span></div></div>
-        <div class="icell"><div class="ic-l">AZ</div><div class="ic-v gn" id="ic-az">-.-<span class="icu"> g</span></div></div>
-        <div class="icell"><div class="ic-l">|A| MAG</div><div class="ic-v gn" id="ic-am">-.-<span class="icu"> g</span></div></div>
+        <div class="icell"><div class="ic-l">AX</div><div class="ic-v gn" id="ic-ax">0.00<span class="icu"> g</span></div></div>
+        <div class="icell"><div class="ic-l">AY</div><div class="ic-v gn" id="ic-ay">0.00<span class="icu"> g</span></div></div>
+        <div class="icell"><div class="ic-l">AZ</div><div class="ic-v gn" id="ic-az">0.00<span class="icu"> g</span></div></div>
+        <div class="icell"><div class="ic-l">|A| MAG</div><div class="ic-v gn" id="ic-am">0.00<span class="icu"> g</span></div></div>
       </div>
       <div class="spwrap">
         <div class="splbl">ACCEL MAGNITUDE — 60 SAMPLES</div>
@@ -229,23 +165,23 @@
         <div class="hud-tl"></div><div class="hud-tr"></div><div class="hud-bl"></div><div class="hud-br"></div>
         <div class="pt"><span class="status-led"></span> BATTERY <span class="chip">POWER</span></div>
         <div style="display:flex;align-items:baseline;gap:8px">
-          <div class="bv yw" id="bat-v">--.--</div><span class="bu">V</span>
-          <div class="bv" id="bat-pct" style="font-size:20px;color:rgba(255,215,10,.85)">--</div><span class="bu">%</span>
+          <div class="bv yw" id="bat-v">0.00</div><span class="bu">V</span>
+          <div class="bv" id="bat-pct" style="font-size:20px;color:var(--amber)">0</div><span class="bu">%</span>
         </div>
         <div class="bl">SAT BUS VOLTAGE · STATE OF CHARGE</div>
-        <div class="gb" style="margin:3px 0 7px"><div class="gf yw" id="gf-bat" style="width:50%"></div></div>
-        <div class="sr" style="margin-top:4px"><span class="sl">CURRENT</span><span class="sv cy" id="bat-cur">--.- A</span></div>
-        <div class="sr"><span class="sl">STATUS</span><span class="sv" id="bat-st">----</span></div>
-        <div class="sr"><span class="sl">CHARGE RATE</span><span class="sv mt" id="bat-rate">-- %/min</span></div>
-        <div class="sr"><span class="sl">ETA</span><span class="sv cy" id="bat-eta">----</span></div>
+        <div class="gb" style="margin:3px 0 7px"><div class="gf yw" id="gf-bat" style="width:0%"></div></div>
+        <div class="sr" style="margin-top:4px"><span class="sl">CURRENT</span><span class="sv mt" id="bat-cur">0.0 A</span></div>
+        <div class="sr"><span class="sl">STATUS</span><span class="sv mt" id="bat-st">NO DATA</span></div>
+        <div class="sr"><span class="sl">CHARGE RATE</span><span class="sv mt" id="bat-rate">0.00 %/min</span></div>
+        <div class="sr"><span class="sl">ETA</span><span class="sv mt" id="bat-eta">NO DATA</span></div>
       </div>
       <div class="pnl pnl-sys pnl-gold" style="flex:1;min-width:160px">
         <div class="hud-tl"></div><div class="hud-tr"></div><div class="hud-bl"></div><div class="hud-br"></div>
         <div class="pt"><span class="status-led"></span> SOLAR <span class="chip">PANELS</span></div>
         <div class="imgrid" style="margin-top:4px">
-          <div class="icell"><div class="ic-l">+X</div><div class="ic-v yw" id="px-v">--.--<span class="icu"> V</span></div></div>
-          <div class="icell"><div class="ic-l">+Y</div><div class="ic-v yw" id="py-v">--.--<span class="icu"> V</span></div></div>
-          <div class="icell"><div class="ic-l">+Z</div><div class="ic-v yw" id="pz-v">--.--<span class="icu"> V</span></div></div>
+          <div class="icell"><div class="ic-l">+X</div><div class="ic-v yw" id="px-v">0.00<span class="icu"> V</span></div></div>
+          <div class="icell"><div class="ic-l">+Y</div><div class="ic-v yw" id="py-v">0.00<span class="icu"> V</span></div></div>
+          <div class="icell"><div class="ic-l">+Z</div><div class="ic-v yw" id="pz-v">0.00<span class="icu"> V</span></div></div>
         </div>
         <div class="bl" style="margin-top:6px">PANEL VOLTAGES — V</div>
       </div>
@@ -253,10 +189,10 @@
         <div class="hud-tl"></div><div class="hud-tr"></div><div class="hud-bl"></div><div class="hud-br"></div>
         <div class="pt"><span class="status-led"></span> GYROSCOPE <span class="chip">RATE</span></div>
         <div class="gyro-strip">
-          <div class="gyro-item"><span class="gyro-l">GX</span><span class="gyro-v" id="gyro-gx">-.-</span></div>
-          <div class="gyro-item"><span class="gyro-l">GY</span><span class="gyro-v" id="gyro-gy">-.-</span></div>
-          <div class="gyro-item"><span class="gyro-l">GZ</span><span class="gyro-v" id="gyro-gz">-.-</span></div>
-          <div class="gyro-item"><span class="gyro-l">|G|</span><span class="gyro-v yw" id="gyro-gm">-.-</span></div>
+          <div class="gyro-item"><span class="gyro-l">GX</span><span class="gyro-v" id="gyro-gx">0.00</span></div>
+          <div class="gyro-item"><span class="gyro-l">GY</span><span class="gyro-v" id="gyro-gy">0.00</span></div>
+          <div class="gyro-item"><span class="gyro-l">GZ</span><span class="gyro-v" id="gyro-gz">0.00</span></div>
+          <div class="gyro-item"><span class="gyro-l">|G|</span><span class="gyro-v yw" id="gyro-gm">0.00</span></div>
         </div>
         <div class="bl" style="margin-top:4px">deg/s — MPU6050</div>
       </div>
@@ -273,53 +209,18 @@
 
   <!-- BOTTOM BAR -->
   <div class="bbar">
-    <div class="rawstr" id="rawstr">RAW › <span>AWAITING DATA...</span></div>
-    <div class="pstat"><span class="pdot"></span> PARSER ACTIVE — 1400ms INTERVAL <span id="data-mode" class="data-mode sim">SIM</span><button class="reconnect-btn" id="reconnect-btn" onclick="tryReconnect()">⟳ RECONNECT</button></div>
-    <div id="dclk" style="color:rgba(0,212,255,.5);font-size:9px;letter-spacing:1px;font-family:'Barlow Condensed',sans-serif;font-weight:600">--:--:-- UTC</div>
+    <div class="rawstr" id="rawstr">RAW › <span>NO SIGNAL</span></div>
+    <div class="pstat"><span class="pdot"></span> PARSER ACTIVE — 1400ms INTERVAL <span id="data-mode" class="data-mode none">NO SOURCE</span><button class="reconnect-btn" id="reconnect-btn" onclick="tryReconnect()">⟳ RECONNECT</button><button class="testdata-btn" id="testdata-btn" onclick="toggleTestData()">▶ TEST DATA</button></div>
+    <div id="dclk" class="dclk">--:--:-- UTC</div>
   </div>
 
-</div>
-
-<!-- ════════ ADMIN MODAL ════════ -->
-<div id="admin">
-  <div class="mbox">
-    <div class="mhdr">
-      <h2>⚙ ADMIN // USER MANAGEMENT</h2>
-      <button class="mclose" onclick="closeAdmin()">✕</button>
-    </div>
-    <div class="mbody">
-      <div class="tabs">
-        <button class="tb act" onclick="stab(event,'tp-u')">USER ACCOUNTS</button>
-        <button class="tb" onclick="stab(event,'tp-a')">ADD USER</button>
-      </div>
-      <div class="tpane act" id="tp-u">
-        <table class="utbl">
-          <thead><tr><th>CALLSIGN / ID</th><th>ROLE</th><th>CREATED</th><th>ACTION</th></tr></thead>
-          <tbody id="utbody"></tbody>
-        </table>
-      </div>
-      <div class="tpane" id="tp-a">
-        <div class="aform">
-          <div class="fgrid">
-            <div class="ff"><label>Callsign / Username</label><input type="text" id="nu-u" placeholder="KD9XXX" autocomplete="off" spellcheck="false"></div>
-            <div class="ff"><label>Role</label><select id="nu-r"><option value="guest">GUEST</option><option value="admin">ADMIN</option></select></div>
-            <div class="ff"><label>Password</label><input type="password" id="nu-p" placeholder="min 6 characters" autocomplete="off"></div>
-            <div class="ff"><label>Confirm Password</label><input type="password" id="nu-p2" placeholder="repeat password" autocomplete="off"></div>
-          </div>
-          <div class="ferr" id="aerr"></div>
-          <button class="addbtn" onclick="addUser()">[ + CREATE ACCOUNT ]</button>
-        </div>
-      </div>
-    </div>
-  </div>
 </div>
 
 <!-- Preloaded sound effects for connection status -->
 <audio id="snd-connection-failed" preload="auto"><source src="Sound Effects/Connection Failed.mp3" type="audio/mpeg"></audio>
 <audio id="snd-connected" preload="auto"><source src="Sound Effects/Connected.mp3" type="audio/mpeg"></audio>
 
-<!-- Dashboard pulls telemetry from Adafruit IO only (push_to_aio.py on CubeSat) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.0.5/mqtt.min.js"></script>
+<!-- Telemetry source: Adafruit IO only (push_to_aio.py on CubeSat) -->
 <script src="config.js"></script>
 <script src="app.js"></script>
 </body>

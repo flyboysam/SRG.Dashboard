@@ -1,16 +1,5 @@
   // ═══════════════ CONFIGURATION ═══════════════
-// Dashboard pulls telemetry from Adafruit IO only (push_to_aio.py on CubeSat).
-
-// Backend bases for user/auth (Rust server); add Pi IP when deployed
-// When served from backend (http://localhost:5050), same-origin avoids CORS
-function getBackendBases(){
-  const list=['http://localhost:5050'];
-  if(typeof window!=='undefined'&&window.location?.protocol?.startsWith('http')){
-    const o=window.location.origin;
-    if(!list.includes(o)) list.unshift(o);
-  }
-  return list;
-}
+// Telemetry source: Adafruit IO only (push_to_aio.py on CubeSat).
 
 // Adafruit IO — telemetry from CubeSat push (push_to_aio.py)
 // Feeds: ms5611-temp (MS5611 barometric sensor °C), gpu-temp (Pi-Core °C), pressure, cpu-usage, vibration, battery
@@ -22,65 +11,12 @@ const ADAFRUIT_MS5611_TEMP = (typeof window !== 'undefined' && window.ADAFRUIT_M
 const ADAFRUIT_PI_CORE_TEMP = (typeof window !== 'undefined' && window.ADAFRUIT_PI_CORE_TEMP_FEED) || 'gpu-temp';
 const DATA_MAX_AGE_MS = 180000;  // 3 min — Adafruit updates ~1.5–2 min
 
-// ═══════════════ MQTT / HIVEMQ ═══════════════
-const MQTT_BROKER = 'wss://broker.hivemq.com:8884/mqtt';
-const MQTT_TOPIC  = 'cubesatsim/telemetry';
-const MQTT_STALE_MS = 15000;  // satellite considered offline after 15 s with no frames
-let mqttClient = null;
-let mqttConnected = false;
-let mqttFrame = null;
-let mqttFrameId = 0;
-let lastProcessedFrameId = -1;
-let mqttLastFrameTime = 0;
-let satOfflineSoundPlayed = false;
-
 // ═══════════════ ATTITUDE STATE ═══════════════
 let imuYaw = 0;
 let attRoll = 0, attPitch = 0, attTargR = 0, attTargP = 0;
 
-// ═══════════════ USER STORE ═══════════════
-const DEF_USERS = [
-  {id:'flyboysam', pw:'Airplane11!', role:'admin', created:'SYSTEM'},
-  {id:'guest',     pw:'guest123',    role:'guest', created:'2026-02-22'},
-  {id:'SRG',      pw:'SRG_2026',    role:'guest', created:'2026-02-22'},
-];
-function loadU(){
-  try{
-    const s=localStorage.getItem('css_u');
-    let list;
-    if(!s) list=DEF_USERS.map(u=>({...u}));
-    else{
-      const parsed=JSON.parse(s);
-      if(!Array.isArray(parsed)||parsed.length===0) list=DEF_USERS.map(u=>({...u}));
-      else list=parsed;
-    }
-    // Ensure every default user exists (so SRG etc. work even with old localStorage)
-    for(const du of DEF_USERS){
-      if(!list.some(u=>u.id.toLowerCase()===du.id.toLowerCase())) list.push({...du});
-    }
-    return list;
-  }catch{ return DEF_USERS.map(u=>({...u})); }
-}
-function saveU(u){try{localStorage.setItem('css_u',JSON.stringify(u))}catch{}}
-let users=loadU(), cur=null;
-let usersFromServer=false, piBaseUrl='';
-
-async function fetchUsersFromServer(){
-  for(const base of getBackendBases()){
-    try{
-      const r=await fetch(`${base}/api/users`,{cache:'no-store'});
-      if(r.ok){
-        const data=await r.json();
-        if(Array.isArray(data)&&data.length>0){ users=data; usersFromServer=true; piBaseUrl=base; return; }
-      }
-    }catch(_){}
-  }
-  usersFromServer=false; piBaseUrl='';
-}
-fetchUsersFromServer();
-
 // ═══════════════ DATA SOURCE STATE ═══════════════
-let dataMode = 'sim';  // 'sim', 'live', 'cloud', or 'adafruit'
+let dataMode = 'sim';  // 'sim' (no source), 'adafruit', or 'test' (synthetic diagnostic data)
 let liveFailCount = 0;
 let lastRecordedData = null;  // { timestamp, temp, press, altCalc, tmp, gx, gy, gz, ax, ay, az, cpuUsage, battery }
 const LIVE_FAIL_MAX = 3;
@@ -99,52 +35,6 @@ function playConnectionFailedSound(){
     a.volume=0.7;a.currentTime=0;
     a.play().catch(()=>{});
   }catch(_){}
-}
-
-function setupMQTT(){
-  if(typeof mqtt==='undefined' || mqttClient) return;
-  try {
-    mqttClient = mqtt.connect(MQTT_BROKER, {
-      clientId: 'srg-dashboard-' + Math.random().toString(36).slice(2,8),
-      clean: true,
-      reconnectPeriod: 3000,
-    });
-    mqttClient.on('connect', () => {
-      mqttConnected = true;
-      dataMode = 'live';
-      updateModeIndicator(false);
-      tlog(`MQTT CONNECTED — ${MQTT_TOPIC}`,'tok');
-      mqttClient.subscribe(MQTT_TOPIC, {qos:1}, (err) => {
-        if(err) tlog(`MQTT SUBSCRIBE FAILED: ${err.message}`,'terr');
-      });
-    });
-    mqttClient.on('message', (topic, payload) => {
-      if(topic !== MQTT_TOPIC) return;
-      try {
-        mqttFrame = JSON.parse(payload.toString());
-        mqttFrameId++;
-        mqttLastFrameTime = Date.now();
-        satOfflineSoundPlayed = false;  // reset so connect sound re-fires on next tick
-      } catch(e) {
-        tlog('MQTT PARSE ERROR','terr');
-      }
-    });
-    mqttClient.on('error', (err) => {
-      mqttConnected = false;
-      tlog(`MQTT ERROR: ${err.message}`,'terr');
-      updateModeIndicator(true);
-    });
-    mqttClient.on('reconnect', () => {
-      mqttConnected = false;
-      updateModeIndicator(true);
-    });
-    mqttClient.on('offline', () => {
-      mqttConnected = false;
-      updateModeIndicator(true);
-    });
-  } catch(e) {
-    tlog(`MQTT INIT ERROR: ${e.message}`,'terr');
-  }
 }
 
 // ═══════════════ STARFIELD ═══════════════
@@ -176,224 +66,53 @@ function setupMQTT(){
   })();
 })();
 
-// ═══════════════ CLOCK & RF STATUS ═══════════════
+// ═══════════════ CLOCK ═══════════════
 function utcStr(){return new Date().toUTCString().split(' ')[4]+' UTC';}
-function updateRfStatus(){
-  const e=document.getElementById('rf-status');if(!e)return;
-  e.textContent=navigator.onLine?'LOCKED':'UNLOCKED';
-  const dot=document.getElementById('rf-dot');if(dot)dot.className='pdot'+(navigator.onLine?'':' red');
-}
 setInterval(()=>{
-  ['lclk','dclk'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=utcStr();});
-  updateRfStatus();
+  const e=document.getElementById('dclk');if(e)e.textContent=utcStr();
 },1000);
-window.addEventListener('online',updateRfStatus);
-window.addEventListener('offline',updateRfStatus);
-setTimeout(updateRfStatus,500);
-
-// ═══════════════ BOOT TEXT ═══════════════
-async function runBoot(){
-  const el=document.getElementById('boot');el.innerHTML='';
-  const addTyping=async(text,cls='',ms=22)=>{
-    const s=document.createElement('span');s.style.display='block';s.className=cls;s.textContent='> ';el.appendChild(s);
-    for(let i=0;i<text.length;i++){ s.textContent='> '+text.slice(0,i+1); el.scrollTop=el.scrollHeight; await new Promise(r=>setTimeout(r,ms)); }
-  };
-  await addTyping('AMSAT CUBESAT-SIM GCS BIOS v2.4.1','hi',15);
-  await new Promise(r=>setTimeout(r,180));
-  const mem=navigator.deviceMemory?`${navigator.deviceMemory}GB`:(performance.memory?`${Math.round(performance.memory.jsHeapSizeLimit/1048576)}MB`:'OK');
-  await addTyping(`MEMORY CHECK............... ${mem} OK`,'',16);
-  await new Promise(r=>setTimeout(r,120));
-  await addTyping(`I2C BUS → 0x77 [MS5611]  0x68 [MPU6050]  N/A (ADAFRUIT IO)`,'hi',10);
-  await new Promise(r=>setTimeout(r,100));
-  let tmpStatus='OK';
-  if(ADAFRUIT_IO_KEY){ try{ const t=await fetch(`${ADAFRUIT_IO_BASE}/${ADAFRUIT_IO_USERNAME}/feeds/${ADAFRUIT_MS5611_TEMP}/data/last`,{headers:{'X-AIO-Key':ADAFRUIT_IO_KEY},signal:AbortSignal.timeout(2000)}); if(t.ok){ const j=await t.json(); tmpStatus=j&&j.value!=null?'AIO':'OK'; } else tmpStatus='OK'; }catch(_){ tmpStatus='OK'; } }
-  await addTyping(`TMP DIODE D3............... ${tmpStatus}`,'ok',12);
-  await new Promise(r=>setTimeout(r,80));
-  const hasData=!!ADAFRUIT_IO_KEY;
-  await addTyping(`APRS CODEC................. ${hasData?'READY':'STANDBY'}`,'ok',10);
-  await new Promise(r=>setTimeout(r,80));
-  const rfStatus=navigator.onLine?'LOCKED':'UNLOCKED';
-  await addTyping(`UPLINK 435 MHz · DOWNLINK 434.9 MHz.. ${rfStatus}`,'hi',8);
-  await new Promise(r=>setTimeout(r,60));
-  await addTyping('ENTER CREDENTIALS TO PROCEED','wn',6);
-  const cur=document.createElement('span');cur.className='boot-cursor';cur.textContent='_';el.appendChild(cur);
-}
-runBoot();
-
-document.getElementById('uid').addEventListener('keydown',e=>e.key==='Enter'&&document.getElementById('upw').focus());
-document.getElementById('upw').addEventListener('keydown',e=>e.key==='Enter'&&doLogin());
-
-// ═══════════════ LOGIN ═══════════════
-async function doLogin(){
-  const uid=document.getElementById('uid').value.trim();
-  const pw=document.getElementById('upw').value;
-  const err=document.getElementById('lerr');
-  const btn=document.getElementById('lbtn');
-  err.textContent='';
-
-  if(!uid||!pw){err.textContent='⚠ OPERATOR ID AND ACCESS CODE REQUIRED';return;}
-  btn.textContent='[ AUTHENTICATING... ]';btn.className='lbtn busy';
-
-  for(const base of getBackendBases()){
-    try{
-      const r=await fetch(`${base}/api/auth`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:uid,pw})});
-      const data=await r.json().catch(()=>({}));
-      if(r.ok&&data.ok&&data.user){
-        cur={id:data.user.id,role:data.user.role,created:data.user.created,pw};
-        const local=loadU();
-        if(!local.some(u=>u.id.toLowerCase()===cur.id.toLowerCase())){
-          local.push({id:cur.id,pw:cur.pw,role:cur.role,created:cur.created||new Date().toISOString().split('T')[0]});
-          saveU(local);
-        }
-        usersFromServer=true; piBaseUrl=base;
-        btn.textContent='[ UPLINK ESTABLISHED ✓ ]';btn.className='lbtn ok2';
-        setTimeout(launch,700);
-        return;
-      }
-    }catch(_){}
-  }
-
-  const localUsers=loadU();
-  const m=localUsers.find(u=>u.id.toLowerCase()===uid.toLowerCase()&&u.pw===pw);
-  if(!m){
-    err.textContent='⚠ AUTHENTICATION FAILED — INVALID CREDENTIALS';
-    btn.className='lbtn err2';setTimeout(()=>btn.className='lbtn',1600);return;
-  }
-  cur=m;
-  btn.textContent='[ UPLINK ESTABLISHED ✓ ]';btn.className='lbtn ok2';
-  setTimeout(launch,700);
-}
-
-function launch(){
-  document.getElementById('login').classList.add('out');
-  setTimeout(()=>{
-    document.getElementById('login').style.display='none';
-    const d=document.getElementById('dash');d.classList.add('show');
-    setTimeout(()=>d.classList.add('vis'),30);
-    document.getElementById('nb-op').textContent=`OPERATOR: ${cur.id.toUpperCase()} // ROLE: ${cur.role.toUpperCase()}`;
-    document.getElementById('nu-name').textContent=cur.id.toUpperCase();
-    document.getElementById('nu-role').textContent=cur.role.toUpperCase();
-    const b=document.getElementById('nu-badge');
-    if(cur.role==='admin'){b.className='badge-a';b.textContent='ADMIN';document.getElementById('admin-btn').style.display='';}
-    else{b.className='badge-g';b.textContent='GUEST';document.getElementById('admin-btn').style.display='none';}
-    startDash();
-  },900);
-}
-
-function doLogout(){
-  cur=null;
-  const d=document.getElementById('dash');d.classList.remove('vis');
-  setTimeout(()=>{
-    d.classList.remove('show');stopDash();
-    const l=document.getElementById('login');
-    l.style.opacity='0';l.style.display='flex';l.classList.remove('out');
-    setTimeout(()=>{l.style.transition='opacity .5s';l.style.opacity='1';},30);
-    document.getElementById('uid').value='';document.getElementById('upw').value='';
-    document.getElementById('lerr').textContent='';
-    document.getElementById('lbtn').textContent='[ AUTHENTICATE // ESTABLISH UPLINK ]';
-    document.getElementById('lbtn').className='lbtn';
-    runBoot();
-  },800);
-}
-
-// ═══════════════ ADMIN ═══════════════
-function openAdmin(){if(!cur||cur.role!=='admin')return;renderUT();document.getElementById('admin').classList.add('show');}
-function closeAdmin(){document.getElementById('admin').classList.remove('show');}
-document.getElementById('admin').addEventListener('click',function(e){if(e.target===this)closeAdmin();});
-
-function stab(e,pid){
-  document.querySelectorAll('.tb').forEach(b=>b.classList.remove('act'));
-  document.querySelectorAll('.tpane').forEach(p=>p.classList.remove('act'));
-  e.target.classList.add('act');document.getElementById(pid).classList.add('act');
-}
-
-function renderUT(){
-  const tb=document.getElementById('utbody');tb.innerHTML='';
-  users.forEach((u,i)=>{
-    const tr=document.createElement('tr');
-    const isA=u.role==='admin',prot=u.id==='flyboysam';
-    tr.innerHTML=`<td>${u.id}</td><td><span class="rtag ${isA?'ra':'rg'}">${u.role.toUpperCase()}</span></td><td>${u.created}</td><td>${prot?'<span style="color:rgba(255,179,0,.6);font-size:9px">PROTECTED</span>':`<button class="delbtn" onclick="delUser(${i})">REMOVE</button>`}</td>`;
-    tb.appendChild(tr);
-  });
-}
-
-async function delUser(i){
-  const u=users[i];if(!u)return;
-  if(u.id==='flyboysam'){return;}
-  if(u.id===cur.id){alert('Cannot remove your own account.');return;}
-  if(usersFromServer&&piBaseUrl&&cur&&cur.pw){
-    try{
-      const r=await fetch(`${piBaseUrl}/api/users/delete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({adminId:cur.id,adminPw:cur.pw,id:u.id})});
-      const data=await r.json().catch(()=>({}));
-      if(!r.ok){ alert(data.error||'Server error'); return; }
-      const listR=await fetch(`${piBaseUrl}/api/users`,{cache:'no-store'});
-      if(listR.ok) users=await listR.json();
-      renderUT();
-      tlog(`SYS: ACCOUNT "${u.id.toUpperCase()}" REMOVED BY ADMIN`,'twn');
-      return;
-    }catch(e){ alert('Network error — try again'); return; }
-  }
-  users.splice(i,1);saveU(users);renderUT();
-  tlog(`SYS: ACCOUNT "${u.id.toUpperCase()}" REMOVED BY ADMIN`,'twn');
-}
-
-async function addUser(){
-  const uid=document.getElementById('nu-u').value.trim();
-  const role=document.getElementById('nu-r').value;
-  const pw=document.getElementById('nu-p').value;
-  const pw2=document.getElementById('nu-p2').value;
-  const err=document.getElementById('aerr');err.textContent='';
-  if(!uid){err.textContent='⚠ USERNAME REQUIRED';return;}
-  if(uid.length<3){err.textContent='⚠ USERNAME MUST BE ≥ 3 CHARACTERS';return;}
-  if(pw.length<6){err.textContent='⚠ PASSWORD MUST BE ≥ 6 CHARACTERS';return;}
-  if(pw!==pw2){err.textContent='⚠ PASSWORDS DO NOT MATCH';return;}
-  if(users.find(u=>u.id.toLowerCase()===uid.toLowerCase())){err.textContent='⚠ USERNAME ALREADY EXISTS';return;}
-  if(usersFromServer&&piBaseUrl&&cur&&cur.pw){
-    try{
-      const r=await fetch(`${piBaseUrl}/api/users`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({adminId:cur.id,adminPw:cur.pw,id:uid,pw,role})});
-      const data=await r.json().catch(()=>({}));
-      if(!r.ok){ err.textContent='⚠ '+(data.error||'Server error'); return; }
-      const listR=await fetch(`${piBaseUrl}/api/users`,{cache:'no-store'});
-      if(listR.ok) users=await listR.json();
-      const local=loadU();
-      if(!local.some(u=>u.id.toLowerCase()===uid.toLowerCase())){
-        local.push({id:uid,pw,role,created:new Date().toISOString().split('T')[0]});
-        saveU(local);
-      }
-      ['nu-u','nu-p','nu-p2'].forEach(id=>document.getElementById(id).value='');
-      document.querySelectorAll('.tb')[0].click();renderUT();
-      tlog(`SYS: NEW ACCOUNT "${uid.toUpperCase()}" [${role.toUpperCase()}] CREATED (saved on server)`,'tinf');
-      return;
-    }catch(e){ err.textContent='⚠ Network error — try again'; return; }
-  }
-  const d=new Date().toISOString().split('T')[0];
-  users.push({id:uid,pw,role,created:d});saveU(users);
-  ['nu-u','nu-p','nu-p2'].forEach(id=>document.getElementById(id).value='');
-  document.querySelectorAll('.tb')[0].click();renderUT();
-  tlog(`SYS: NEW ACCOUNT "${uid.toUpperCase()}" [${role.toUpperCase()}] CREATED`,'tinf');
-}
 
 // ═══════════════ DASHBOARD ENGINE ═══════════════
 let timers=[],tHist=[],tmpHist=[],diodeHist=[],aHist=[],batHistory=[],frames=0,pkts=0,sesStart=0;
 const BAT_MIN=3.5, BAT_MAX=4.5;
-const SIGS=['▯▯▯▯▯','▮▯▯▯▯','▮▮▯▯▯','▮▮▮▯▯','▮▮▮▮▯','▮▮▮▮▮'];
+
+// ═══════════════ CONNECTION STATUS ═══════════════
+// Single source of truth for the navbar pill: 'connecting' | 'connected' | 'disconnected' | 'test'.
+function setConnState(state){
+  const pill=document.getElementById('conn-status');
+  const txt=document.getElementById('conn-text');
+  if(pill) pill.dataset.state=state;
+  if(txt) txt.textContent=state==='connected'?'CONNECTED':state==='connecting'?'CONNECTING…':state==='test'?'TEST DATA':'DISCONNECTED';
+  // The test-data option only makes sense when we're not already receiving real telemetry.
+  const testBtn=document.getElementById('testdata-btn');
+  if(testBtn) testBtn.style.display = state==='connected' ? 'none' : '';
+}
+
+function updateModeIndicator(offline){
+  const el=document.getElementById('data-mode');
+  if(dataMode==='test'){
+    setConnState('test');
+    if(el){ el.textContent='TEST DATA'; el.className='data-mode test'; }
+    return;
+  }
+  if(dataMode==='sim'){
+    setConnState('disconnected');
+    if(el){ el.textContent='NO SOURCE'; el.className='data-mode none'; }
+    return;
+  }
+  setConnState(offline?'disconnected':'connected');
+  if(!el) return;
+  el.textContent=offline?'ADAFRUIT IO — RETRYING':'ADAFRUIT IO';
+  el.className='data-mode '+(offline?'offline':'cloud');
+}
 
 async function startDash(){
   sesStart=Date.now();
-  tlog(`OPERATOR ${cur.id.toUpperCase()} [${cur.role.toUpperCase()}] AUTHENTICATED`,'tok');
-  tlog('SESSION STARTED — TELEMETRY ACQUISITION ACTIVE','tok');
+  setConnState('connecting');
+  tlog('GROUND STATION SESSION INITIATED','tok');
   tlog('SENSORS ONLINE: MS5611 · MPU6050 · TMP-DIODE','tok');
 
-  if(typeof mqtt !== 'undefined'){
-    dataMode='live'; liveFailCount=0;
-    if(mqttConnected){
-      tlog(`MQTT HIVEMQ — ALREADY CONNECTED — ${MQTT_TOPIC}`,'tok');
-      updateModeIndicator(false);
-    } else {
-      tlog('TELEMETRY FROM MQTT HIVEMQ — CONNECTING...','tinf');
-      setupMQTT();  // no-op if client already exists but not yet connected
-    }
-  } else if(ADAFRUIT_IO_KEY){
+  if(ADAFRUIT_IO_KEY){
     dataMode='adafruit'; liveFailCount=0;
     tlog('TELEMETRY FROM ADAFRUIT IO (push_to_aio.py on CubeSat)','tinf');
     // Immediate check — if dashboard not running or data stale, play failure sound right away
@@ -413,77 +132,20 @@ async function startDash(){
     }
   } else {
     dataMode='sim';
-    tlog('MODE: LOCAL SIMULATION — no data source configured','twn');
+    tlog('NO TELEMETRY SOURCE CONFIGURED — AWAITING CONNECTION','twn');
+    updateModeIndicator();
   }
-  updateModeIndicator();
 
   timers.push(setInterval(tickMET,1000));
   timers.push(setInterval(tickTel,1400));
   tickTel();
 }
 
-function stopDash(){
-  timers.forEach(clearInterval);timers=[];
-  timers=[];
-  tHist=[];tmpHist=[];diodeHist=[];aHist=[];batHistory=[];frames=0;pkts=0;
-  connectionSoundPlayed=false; satOfflineSoundPlayed=false;
-  mqttFrame=null; mqttFrameId=0; lastProcessedFrameId=-1; mqttLastFrameTime=0;
-  imuYaw=0; attRoll=0; attPitch=0; attTargR=0; attTargP=0;
-  // Keep mqttClient alive across logout so re-login is instant;
-  // only reset state so the next startDash() re-evaluates the connection
-  dataMode='sim';
-  const tl=document.getElementById('tlog');if(tl)tl.innerHTML='';
-}
-
-function updateModeIndicator(offline){
-  const el=document.getElementById('data-mode');
-  if(!el) return;
-  if(dataMode==='sim'){
-    el.className='data-mode sim';
-    return;
-  }
-  if(dataMode==='live'){
-    el.textContent=offline?'SAT OFFLINE':'LIVE';
-    el.className='data-mode '+(offline?'offline':'live');
-  } else if(dataMode==='cloud'){
-    el.textContent='CLOUD';
-    el.className='data-mode cloud';
-  } else if(dataMode==='adafruit'){
-    el.textContent=offline?'OFFLINE':'ADAFRUIT';
-    el.className='data-mode '+(offline?'offline':'cloud');
-  }
-}
-
 async function tryReconnect(){
+  if(dataMode==='test') setTestDataMode(false);
   const btn=document.getElementById('reconnect-btn');
   if(btn){btn.classList.add('trying');btn.textContent='⟳ TRYING...';}
-
-  if(typeof mqtt !== 'undefined'){
-    tlog('TRYING MQTT HIVEMQ...','tinf');
-    if(mqttConnected){
-      dataMode='live'; liveFailCount=0;
-      updateModeIndicator(false);
-      tlog('MQTT CONNECTED ✓','tok');
-      playConnectionSound(); connectionSoundPlayed=true;
-      if(btn){btn.classList.remove('trying');btn.textContent='⟳ RECONNECT';}
-      return;
-    }
-    // Client exists but disconnected — end it and create a fresh one
-    if(mqttClient){ try{ mqttClient.end(true); }catch(_){} mqttClient=null; mqttConnected=false; }
-    setupMQTT();
-    // Give the async connect up to 4 s to establish
-    for(let i=0;i<8;i++){
-      await new Promise(r=>setTimeout(r,500));
-      if(mqttConnected){
-        dataMode='live'; liveFailCount=0;
-        updateModeIndicator(false);
-        tlog('MQTT CONNECTED ✓','tok');
-        playConnectionSound(); connectionSoundPlayed=true;
-        if(btn){btn.classList.remove('trying');btn.textContent='⟳ RECONNECT';}
-        return;
-      }
-    }
-  }
+  setConnState('connecting');
 
   if(ADAFRUIT_IO_KEY){
     tlog('TRYING ADAFRUIT IO...','tinf');
@@ -506,6 +168,55 @@ async function tryReconnect(){
   tlog('ADAFRUIT IO UNAVAILABLE — AWAITING RECONNECT','terr');
   updateModeIndicator(true);
   if(btn){btn.classList.remove('trying');btn.textContent='⟳ RECONNECT';}
+}
+
+// ═══════════════ TEST DATA MODE ═══════════════
+// Diagnostic aid: when there's no real telemetry, let the user feed the dashboard
+// smoothly-varying synthetic values so they can confirm the UI itself is working.
+// Always clearly labeled (status pill, source chip, and raw stream all say TEST) so
+// it's never mistaken for a real downlink.
+let testStartTime = 0;
+function generateTestFrame(){
+  const t=(Date.now()-testStartTime)/1000;
+  const temp=22+Math.sin(t/9)*3+(Math.random()-0.5)*0.3;
+  const press=1013+Math.sin(t/14)*8+(Math.random()-0.5)*0.5;
+  const tmp=temp+2.5+Math.sin(t/6)*1.2;
+  const diodeTemp=tmp-1.5+Math.sin(t/11)*0.8;
+  const battery=3.9+Math.sin(t/40)*0.25;
+  const cpuUsage=35+Math.sin(t/17)*12+Math.random()*4;
+  const gx=Math.sin(t/3)*8+(Math.random()-0.5)*1.5;
+  const gy=Math.cos(t/4)*6+(Math.random()-0.5)*1.5;
+  const gz=Math.sin(t/5)*4+(Math.random()-0.5)*1.5;
+  const ax=Math.sin(t/6)*0.15+(Math.random()-0.5)*0.03;
+  const ay=Math.cos(t/7)*0.12+(Math.random()-0.5)*0.03;
+  const az=1+Math.sin(t/8)*0.05+(Math.random()-0.5)*0.02;
+  return {temp,press,tmp,diodeTemp,battery,cpuUsage,gx,gy,gz,ax,ay,az};
+}
+
+function updateTestBtn(){
+  const btn=document.getElementById('testdata-btn');
+  if(!btn) return;
+  btn.textContent=dataMode==='test'?'■ STOP TEST DATA':'▶ TEST DATA';
+  btn.classList.toggle('active', dataMode==='test');
+}
+
+function setTestDataMode(on){
+  if(on){
+    testStartTime=Date.now();
+    dataMode='test'; liveFailCount=0;
+    tlog('TEST DATA MODE ENABLED — SIMULATED TELEMETRY, NOT REAL','twn');
+  } else {
+    // Don't assume the last-known real state still holds — drop to disconnected
+    // and let the user hit Reconnect for a freshly verified Adafruit IO check.
+    dataMode='sim';
+    tlog('TEST DATA MODE DISABLED','twn');
+  }
+  updateModeIndicator();
+  updateTestBtn();
+}
+
+function toggleTestData(){
+  setTestDataMode(dataMode!=='test');
 }
 
 async function fetchAdafruitLast(feedKey){
@@ -553,66 +264,15 @@ async function tickTel(){
   let cpuUsage=null, battery=null, diodeTemp=null;
   let source = 'sim';
 
-  // MQTT / HiveMQ — immediate frame from cubesatsim/telemetry
-  // Detect satellite going offline: broker connected but no frames for MQTT_STALE_MS
-  if(dataMode==='live' && mqttLastFrameTime > 0 && (Date.now()-mqttLastFrameTime) > MQTT_STALE_MS){
-    if(!satOfflineSoundPlayed){
-      satOfflineSoundPlayed = true;
-      connectionSoundPlayed = false;  // allow connect sound to re-fire when satellite comes back
-      tlog('SAT OFFLINE — NO FRAMES RECEIVED','terr');
-      updateModeIndicator(true);
-      playConnectionFailedSound();
-    }
-    // fall through — mqttFrame is stale, source stays 'sim', displays will show no-data
-  } else if(source==='sim' && dataMode==='live' && mqttFrame){
-    try {
-      const pFloat=(v)=>v!=null&&v!==''&&!isNaN(parseFloat(v))?+parseFloat(v):null;
-      const t = pFloat(mqttFrame.temp_ms ?? mqttFrame.temp ?? mqttFrame.temperature);
-      const p = pFloat(mqttFrame.pres_ms ?? mqttFrame.pres ?? mqttFrame.pressure);
-      const piTemp = pFloat(mqttFrame.temp_tmp ?? mqttFrame.temp_pi ?? mqttFrame.tmp);
-      const diodeRaw = pFloat(mqttFrame.temp_diode ?? mqttFrame.diode ?? mqttFrame.d3);
-      const cpuRaw = pFloat(mqttFrame.cpuUsage ?? mqttFrame.cpu ?? mqttFrame['cpu-usage'] ?? mqttFrame.cpu_usage);
-      const batRaw = pFloat(mqttFrame.battery ?? mqttFrame.voltage ?? mqttFrame.volt ?? mqttFrame.bat);
-      cpuUsage = cpuRaw;
-      battery = batRaw;
-      gx = pFloat(mqttFrame.gx); gy = pFloat(mqttFrame.gy); gz = pFloat(mqttFrame.gz);
-      ax = pFloat(mqttFrame.ax); ay = pFloat(mqttFrame.ay); az = pFloat(mqttFrame.az);
-      if(t!=null && p!=null){
-        temp = t; press = p;
-        altCalc = +(44330*(1-Math.pow(press/1013.25,1/5.255))).toFixed(1);
-        tmp = piTemp!=null ? piTemp : temp;
-        if(diodeRaw!=null) diodeTemp = diodeRaw;
-        source='live'; liveFailCount=0;
-        if(!connectionSoundPlayed){ playConnectionSound(); connectionSoundPlayed=true; updateModeIndicator(false); }
-      }
-      // Attitude — only integrate yaw once per new MQTT frame
-      if(ax!=null && ay!=null && az!=null){
-        const _ax=ax||0, _ay=ay||0, _az=az||1;
-        const roll  = Math.atan2(_ay, _az) * 180 / Math.PI;
-        const pitch = Math.atan2(-_ax, Math.sqrt(_ay*_ay + _az*_az)) * 180 / Math.PI;
-        if(lastProcessedFrameId !== mqttFrameId){
-          // Dead zone: MPU6050 at rest produces ~0.5–2 °/s noise; ignore below 3 °/s
-          if(Math.abs(gz||0) > 3.0) imuYaw += (gz||0) * 0.3;
-          lastProcessedFrameId = mqttFrameId;
-        }
-        // Only update attitude target if change exceeds 0.5° to filter accel noise jitter
-        if(Math.abs(roll  - attTargR) > 0.5) attTargR = roll;
-        if(Math.abs(pitch - attTargP) > 0.5) attTargP = pitch;
-        set('att-roll',  roll.toFixed(1)  + '°');
-        set('att-pitch', pitch.toFixed(1) + '°');
-        set('att-yaw',   (((imuYaw % 360) + 360) % 360).toFixed(1) + '°');
-      }
-    } catch(err){
-      liveFailCount++;
-      if(liveFailCount===1){
-        tlog(`MQTT DATA ERROR: ${err.message}`,'terr');
-        playConnectionFailedSound();
-      }
-      if(liveFailCount>=LIVE_FAIL_MAX && dataMode==='live'){
-        tlog('MQTT OFFLINE — AWAITING RECONNECT','terr');
-        updateModeIndicator(true);
-      }
-    }
+  // Test data — synthetic, smoothly-varying values so the UI can be verified with no real link
+  if(dataMode==='test'){
+    const f=generateTestFrame();
+    temp=f.temp; press=f.press;
+    altCalc=+(44330*(1-Math.pow(press/1013.25,1/5.255))).toFixed(1);
+    tmp=f.tmp; diodeTemp=f.diodeTemp;
+    battery=f.battery; cpuUsage=f.cpuUsage;
+    gx=f.gx; gy=f.gy; gz=f.gz; ax=f.ax; ay=f.ay; az=f.az;
+    source='test';
   }
 
   // Adafruit IO — temp, pressure, gpu-temp, cpu-usage, vibration, battery, gx gy gz ax ay az (optional)
@@ -656,12 +316,14 @@ async function tickTel(){
     }
   }
 
-  // No Adafruit data — show placeholders instead of fake simulation
+  // No live data — reset to a clean zero state rather than freezing on stale readings
   if(source==='sim'){
     temp=null; press=null; altCalc=null;
     gx=null; gy=null; gz=null; ax=null; ay=null; az=null; tmp=null;
     if(cpuUsage==null) cpuUsage=null;
     if(battery==null) battery=null;
+    imuYaw=0; attRoll=0; attPitch=0; attTargR=0; attTargP=0;
+    set('att-roll','0.0°'); set('att-pitch','0.0°'); set('att-yaw','0.0°');
   }
 
   // Ensure numeric (or keep null for placeholders)
@@ -671,10 +333,25 @@ async function tickTel(){
   ax=(ax!=null&&!isNaN(ax))?+ax:null; ay=(ay!=null&&!isNaN(ay))?+ay:null; az=(az!=null&&!isNaN(az))?+az:null;
   tmp=(tmp!=null&&!isNaN(tmp))?+tmp:null;
 
-  set('ms-t', temp!=null ? temp.toFixed(2) : '--.--');
-  set('ms-tf', temp!=null ? ((temp*9/5)+32).toFixed(1)+' °F' : '-- °F');
-  set('ms-p', press!=null ? press.toFixed(2)+' hPa' : '---- hPa');
-  set('ms-a', altCalc!=null ? altCalc.toFixed(1)+' m' : '--.-- m');
+  // Attitude — derived from whichever source supplied ax/ay/az this tick
+  if(ax!=null && ay!=null && az!=null){
+    const _ax=ax||0, _ay=ay||0, _az=az||1;
+    const roll  = Math.atan2(_ay, _az) * 180 / Math.PI;
+    const pitch = Math.atan2(-_ax, Math.sqrt(_ay*_ay + _az*_az)) * 180 / Math.PI;
+    // Dead zone: MPU6050 at rest produces ~0.5–2 °/s noise; ignore below 3 °/s
+    if(Math.abs(gz||0) > 3.0) imuYaw += (gz||0) * 0.3;
+    // Only update attitude target if change exceeds 0.5° to filter accel noise jitter
+    if(Math.abs(roll  - attTargR) > 0.5) attTargR = roll;
+    if(Math.abs(pitch - attTargP) > 0.5) attTargP = pitch;
+    set('att-roll',  roll.toFixed(1)  + '°');
+    set('att-pitch', pitch.toFixed(1) + '°');
+    set('att-yaw',   (((imuYaw % 360) + 360) % 360).toFixed(1) + '°');
+  }
+
+  set('ms-t', temp!=null ? temp.toFixed(2) : '0.00');
+  set('ms-tf', temp!=null ? ((temp*9/5)+32).toFixed(1)+' °F' : '0.0 °F');
+  set('ms-p', press!=null ? press.toFixed(2)+' hPa' : '0.00 hPa');
+  set('ms-a', altCalc!=null ? altCalc.toFixed(1)+' m' : '0.0 m');
   gb('gf-t', temp!=null ? ((temp-10)/40)*100 : 0);
   gb('gf-p', press!=null ? ((press-950)/130)*100 : 0);
   gb('gf-a', altCalc!=null ? Math.min(100, Math.max(0,(altCalc/500)*100)) : 0);
@@ -683,15 +360,15 @@ async function tickTel(){
   statEl('st-t', temp==null?'na':tOk, 'NOMINAL','OUT OF RANGE');
   statEl('st-p', press==null?'na':pOk, 'NOMINAL','OUT OF RANGE');
 
-  set('tmp-v', tmp!=null ? tmp.toFixed(1) : '--.-');
-  set('tmp-tf', tmp!=null ? ((tmp*9/5)+32).toFixed(1)+' °F' : '-- °F');
+  set('tmp-v', tmp!=null ? tmp.toFixed(1) : '0.0');
+  set('tmp-tf', tmp!=null ? ((tmp*9/5)+32).toFixed(1)+' °F' : '0.0 °F');
   gb('gf-tmp', tmp!=null ? ((tmp-10)/40)*100 : 0);
   const diodeVal=(diodeTemp!=null&&!isNaN(diodeTemp))?+diodeTemp:null;
-  set('tmp-diode-v', diodeVal!=null ? diodeVal.toFixed(1) : '--.-');
-  set('tmp-diode-tf', diodeVal!=null ? ((diodeVal*9/5)+32).toFixed(1)+' °F' : '-- °F');
+  set('tmp-diode-v', diodeVal!=null ? diodeVal.toFixed(1) : '0.0');
+  set('tmp-diode-tf', diodeVal!=null ? ((diodeVal*9/5)+32).toFixed(1)+' °F' : '0.0 °F');
   gb('gf-diode', diodeVal!=null ? ((diodeVal-10)/40)*100 : 0);
   const deltaVal=(temp!=null&&tmp!=null) ? (temp-tmp) : null;
-  set('dt', deltaVal!=null ? ((deltaVal>=0?'+':'')+deltaVal.toFixed(1)+' °C') : '--.- °C');
+  set('dt', deltaVal!=null ? ((deltaVal>=0?'+':'')+deltaVal.toFixed(1)+' °C') : '0.0 °C');
   set('st-b',hasData?'NOMINAL ✓':'NO DATA'); setcl('st-b','sv '+(hasData?'gn':'mt'));
   set('st-d',hasData?'OPERATIONAL':'NO DATA'); setcl('st-d','sv '+(hasData?'gn':'mt'));
 
@@ -702,23 +379,21 @@ async function tickTel(){
   imuCell('ic-ax',ax,'g',true);    imuCell('ic-ay',ay,'g',true);
   imuCell('ic-az',az,'g',true);    imuCell('ic-am',am,'g',true);
 
-  const cpuVal=typeof cpuUsage==='number'&&!isNaN(cpuUsage)?cpuUsage:null;
   const batVal=typeof battery==='number'&&!isNaN(battery)?battery:null;
-  set('cpu-v', cpuVal!=null?cpuVal.toFixed(1):'--');
-  gb('gf-cpu', cpuVal!=null?Math.min(100,Math.max(0,cpuVal)):0);
-  set('bat-v', batVal!=null?batVal.toFixed(2):'--.--');
+  set('bat-v', batVal!=null?batVal.toFixed(2):'0.00');
   const batPct=batVal!=null?Math.min(100,Math.max(0,((batVal-BAT_MIN)/(BAT_MAX-BAT_MIN))*100)):null;
-  gb('gf-bat', batPct!=null?batPct:50);
-  set('bat-pct', batPct!=null?Math.round(batPct).toString():'--');
+  gb('gf-bat', batPct!=null?batPct:0);
+  set('bat-pct', batPct!=null?Math.round(batPct).toString():'0');
   const batOk=batVal!=null&&batVal>=BAT_MIN&&batVal<=BAT_MAX;
-  const batStatus=batVal!=null?(batOk?'NOMINAL':(batVal>BAT_MAX?'OVERVOLT':'LOW')):'----';
+  const batStatus=batVal!=null?(batOk?'NOMINAL':(batVal>BAT_MAX?'OVERVOLT':'LOW')):'NO DATA';
   set('bat-st', batStatus);
-  setcl('bat-st','sv '+(batOk?'gn':'rd'));
+  setcl('bat-st','sv '+(batVal==null?'mt':batOk?'gn':'rd'));
 
-  // Track battery history for rate/ETA calculation
+  // Track battery history for rate/ETA calculation — only while actually connected,
+  // so a stale/frozen history doesn't keep reporting a fake rate after disconnect.
   if(batVal!=null){ batHistory.push({v:batVal,t:Date.now()}); if(batHistory.length>60)batHistory.shift(); }
   let batRate=null, batEta=null;
-  if(batHistory.length>=5){
+  if(batVal!=null && batHistory.length>=5){
     const oldest=batHistory[0], newest=batHistory[batHistory.length-1];
     const dtMin=(newest.t-oldest.t)/60000;
     if(dtMin>=0.5){ // require at least 30s of history
@@ -731,21 +406,23 @@ async function tickTel(){
       }
     }
   }
-  set('bat-rate', batRate!=null?`${batRate>=0?'+':''}${batRate.toFixed(2)} %/min`:'-- %/min');
+  set('bat-rate', batRate!=null?`${batRate>=0?'+':''}${batRate.toFixed(2)} %/min`:'0.00 %/min');
   const rateEl=document.getElementById('bat-rate');
   if(rateEl) rateEl.className='sv '+(batRate==null?'mt':batRate>0.05?'gn':batRate<-0.05?'rd':'yw');
-  set('bat-eta', batEta||'----');
-  setcl('bat-eta','sv cy');
-  set('gyro-gx',gx!=null?gx.toFixed(2):'-.-'); set('gyro-gy',gy!=null?gy.toFixed(2):'-.-');
-  set('gyro-gz',gz!=null?gz.toFixed(2):'-.-'); set('gyro-gm',gm!=null?gm.toFixed(2):'-.-');
+  set('bat-eta', batEta||'NO DATA');
+  setcl('bat-eta','sv '+(batEta?'cy':'mt'));
+  set('gyro-gx',gx!=null?gx.toFixed(2):'0.00'); set('gyro-gy',gy!=null?gy.toFixed(2):'0.00');
+  set('gyro-gz',gz!=null?gz.toFixed(2):'0.00'); set('gyro-gm',gm!=null?gm.toFixed(2):'0.00');
 
   frames++;pkts++;
   set('nv-frm',frames); set('pkt-n',pkts);
   set('rf-s',hasData?'▮▮▮▮▯':'▯▯▯▯▯');  // Fixed when connected — no fake random
+  setcl('rf-s','sv '+(hasData?'gn':'mt'));
 
-  const fmt=(v)=>v!=null&&typeof v==='number'?v.toFixed(2):'-.-';
-  const offlineLabel = dataMode==='live' ? 'MQTT OFFLINE' : 'ADAFRUIT IO OFFLINE';
-  const raw=hasData?`OK MS5611 ${temp} ${press} ${altCalc} MPU6050 ${fmt(gx)} ${fmt(gy)} ${fmt(gz)} ${fmt(ax)} ${fmt(ay)} ${fmt(az)} TMP ${tmp}`:`NO DATA — ${offlineLabel}`;
+  const fmt=(v)=>v!=null&&typeof v==='number'?v.toFixed(2):'0.00';
+  const offlineLabel = dataMode==='adafruit' ? 'ADAFRUIT IO OFFLINE' : 'NO TELEMETRY SOURCE';
+  const rawPrefix = source==='test' ? 'TEST' : 'OK';
+  const raw=hasData?`${rawPrefix} MS5611 ${temp} ${press} ${altCalc} MPU6050 ${fmt(gx)} ${fmt(gy)} ${fmt(gz)} ${fmt(ax)} ${fmt(ay)} ${fmt(az)} TMP ${tmp}`:`NO SIGNAL — ${offlineLabel}`;
   document.getElementById('rawstr').innerHTML=`RAW › <span>${raw}</span>`;
 
   if(hasData){
@@ -769,7 +446,7 @@ async function tickTel(){
 
 function imuCell(id,val,unit,isGn){
   const e=document.getElementById(id);if(!e)return;
-  e.innerHTML=`${typeof val==='number'&&!isNaN(val)?val.toFixed(2):'-.-'}<span class="icu"> ${unit}</span>`;
+  e.innerHTML=`${typeof val==='number'&&!isNaN(val)?val.toFixed(2):'0.00'}<span class="icu"> ${unit}</span>`;
   e.className='ic-v'+(isGn?' gn':'');
 }
 function set(id,v){const e=document.getElementById(id);if(e)e.textContent=v;}
@@ -999,8 +676,5 @@ function tlog(msg,cls){
   if(++logN>150)el.removeChild(el.firstChild);
 }
 
-// ═══════════════ PAGE LOAD — PRE-CONNECT MQTT ═══════════════
-// Start connecting to HiveMQ immediately on page load (before login)
-// so the WebSocket is already established by the time the user authenticates.
-// setupMQTT() is a no-op if mqtt.js is absent or the client already exists.
-if(typeof mqtt !== 'undefined') setupMQTT();
+// ═══════════════ BOOTSTRAP — DASHBOARD LOADS DIRECTLY, NO LOGIN GATE ═══════════════
+startDash();
