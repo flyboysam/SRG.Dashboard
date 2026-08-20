@@ -18,6 +18,7 @@ let attRoll = 0, attPitch = 0, attTargR = 0, attTargP = 0;
 // ═══════════════ DATA SOURCE STATE ═══════════════
 let dataMode = 'sim';  // 'sim' (no source), 'adafruit', or 'test' (synthetic diagnostic data)
 let liveFailCount = 0;
+let adafruitOfflineNotified = false;  // gates the "OFFLINE" log line so it fires once per outage, not once per tick
 let lastRecordedData = null;  // { timestamp, temp, press, altCalc, tmp, gx, gy, gz, ax, ay, az, cpuUsage, battery }
 const LIVE_FAIL_MAX = 3;
 let connectionSoundPlayed = false;
@@ -144,6 +145,7 @@ async function startDash(){
     } catch(_) {
       playConnectionFailedSound();
       tlog('ADAFRUIT IO UNAVAILABLE — AWAITING RECONNECT','terr');
+      adafruitOfflineNotified=true;
       updateModeIndicator(true);
     }
   } else {
@@ -171,7 +173,7 @@ async function tryReconnect(){
       const tempMeta=await fetchAdafruitLastWithMeta(ADAFRUIT_MS5611_TEMP);
       const p=await fetchAdafruitLast('pressure');
       if(tempMeta&&isDataFresh(tempMeta.created_at)&&p!=null&&!isNaN(parseFloat(tempMeta.value))&&!isNaN(parseFloat(p))){
-        dataMode='adafruit'; liveFailCount=0;
+        dataMode='adafruit'; liveFailCount=0; adafruitOfflineNotified=false;
         updateModeIndicator(false);
         tlog('ADAFRUIT IO CONNECTED ✓','tok');
         playConnectionSound(); connectionSoundPlayed=true;
@@ -184,6 +186,7 @@ async function tryReconnect(){
   }
   playConnectionFailedSound();
   tlog('ADAFRUIT IO UNAVAILABLE — AWAITING RECONNECT','terr');
+  adafruitOfflineNotified=true;
   updateModeIndicator(true);
   if(btn){btn.classList.remove('trying');btn.textContent='⟳ RECONNECT';}
 }
@@ -319,7 +322,7 @@ async function tickTel(){
         temp=t; press=p;
         altCalc=+(44330*(1-Math.pow(press/1013.25,1/5.255))).toFixed(1);
         tmp=!isNaN(piTemp)?piTemp:temp;
-        source='adafruit'; liveFailCount=0;
+        source='adafruit'; liveFailCount=0; adafruitOfflineNotified=false;
         if(!connectionSoundPlayed){ playConnectionSound(); connectionSoundPlayed=true; }
       } else { throw new Error('Invalid Adafruit data'); }
     }catch(err){
@@ -328,7 +331,11 @@ async function tickTel(){
         tlog(`ADAFRUIT IO ERROR: ${err.message}`,'terr');
         playConnectionFailedSound();
       }
-      if(liveFailCount>=LIVE_FAIL_MAX && dataMode==='adafruit'){
+      // Only announce the outage once — liveFailCount keeps climbing every tick
+      // while still offline, so without this guard the log (and the sound) would
+      // repeat forever instead of firing once when the link actually drops.
+      if(liveFailCount>=LIVE_FAIL_MAX && dataMode==='adafruit' && !adafruitOfflineNotified){
+        adafruitOfflineNotified=true;
         tlog('ADAFRUIT IO OFFLINE — AWAITING RECONNECT','terr');
         updateModeIndicator(true);
       }
