@@ -78,10 +78,31 @@ const CommandHandler = (function () {
     return `${h}:${m}:${s}`;
   }
 
+  // ── Developer easter egg ──
+  // Not a real command — no entry in COMMANDS, so it never appears in
+  // listCommands()/Tab-autocomplete or the help text. It's just a hidden
+  // branch inside `help`'s own argument handling. Flavor only, no auth: it
+  // doesn't gate anything real, so there's nothing sensitive to protect.
+  function isSecretFlag(args) { return args.length === 1 && args[0].toLowerCase() === '--srgboss'; }
+  function secretDevResponse() {
+    return { lines: [
+      tag('DEV'),
+      '',
+      'SRG GROUND SYSTEMS — DEVELOPER CHANNEL',
+      rule(),
+      "Hey Sam — if you're reading this, the console booted clean.",
+      'KD9SAT-11: built with duct tape, coffee, and way too much JavaScript.',
+      '',
+      'Keep flying it.',
+      rule(),
+    ] };
+  }
+
   // ── Commands ──
   const COMMANDS = {
 
-    async help() {
+    async help(args) {
+      if (isSecretFlag(args)) return secretDevResponse();
       return { lines: [
         'Available CubeSat Commands',
         rule(),
