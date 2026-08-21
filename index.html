@@ -4,6 +4,21 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SRG DASHBOARD // CUBESAT MISSION CONTROL</title>
+<!-- Applied before styles.css loads so the correct theme paints on the very
+     first frame — no flash of the wrong theme while JS elsewhere boots. -->
+<script>
+(function(){
+  try{
+    var stored = localStorage.getItem('srg-theme');
+    var theme = (stored === 'light' || stored === 'dark')
+      ? stored
+      : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme', theme);
+  }catch(e){
+    document.documentElement.setAttribute('data-theme','dark');
+  }
+})();
+</script>
 <link rel="icon" type="image/png" href="CubeSat.png">
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -40,6 +55,11 @@
       <div class="nstat"><span class="nv" id="nv-frm">0</span><span class="nl">FRAMES RX</span></div>
       <div class="nstat"><span class="nv">435</span><span class="nl">↑ MHz</span></div>
       <div class="nstat"><span class="nv">434.9</span><span class="nl">↓ MHz</span></div>
+      <div class="nb-div"></div>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false" aria-label="Switch to light theme" title="Toggle light / dark theme">
+        <svg class="ti-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.6M12 18.9v2.6M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M2.5 12h2.6M18.9 12h2.6M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8"/></svg>
+        <svg class="ti-moon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.4 14.7A8.4 8.4 0 0 1 9.3 3.6a8.4 8.4 0 1 0 11.1 11.1Z"/></svg>
+      </button>
       <div class="nb-div"></div>
       <div class="conn-status" id="conn-status" data-state="connecting">
         <span class="conn-dot"></span>
@@ -104,7 +124,7 @@
       <div class="sr"><span class="sl">BOARD HEALTH</span><span class="sv mt" id="st-b">NO DATA</span></div>
       <div class="sr"><span class="sl">DIODE STATUS</span><span class="sv mt" id="st-d">NO DATA</span></div>
 
-      <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(150,178,214,.12)">
+      <div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
         <div class="sr"><span class="sl">PACKET #</span><span class="sv" id="pkt-n">0</span></div>
         <div class="sr"><span class="sl">RF SIGNAL</span><span class="sv mt" id="rf-s">▯▯▯▯▯</span></div>
         <div class="sr"><span class="sl">SAT ID</span><span class="sv">KD9SAT-11</span></div>

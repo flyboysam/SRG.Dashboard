@@ -82,6 +82,59 @@ function playConnectionFailedSound(){
   })();
 })();
 
+// ═══════════════ THEME ═══════════════
+// data-theme on <html> is already set (inline script in <head>, before first
+// paint) — this just wires the toggle control and keeps it in sync, and lets
+// canvas-drawn instruments (attitude ring, sparklines) know when to re-read
+// their colors, since canvas fillStyle/strokeStyle can't reference CSS vars.
+const THEME_STORAGE_KEY = 'srg-theme';
+
+function getTheme(){
+  return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+}
+function cssVar(name){
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+// Canvas fillStyle/strokeStyle can't resolve var(--x) or take a bare hex + alpha,
+// so sparklines and the attitude instrument read the current theme's hex tokens
+// through here rather than hardcoding one theme's palette into the draw calls.
+function hexA(hex, alpha){
+  const h = (hex||'').replace('#','').trim();
+  const full = h.length===3 ? h.split('').map(c=>c+c).join('') : h;
+  const r = parseInt(full.substring(0,2),16)||0, g = parseInt(full.substring(2,4),16)||0, b = parseInt(full.substring(4,6),16)||0;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+function applyThemeToToggle(){
+  const btn = document.getElementById('theme-toggle');
+  if(!btn) return;
+  const isLight = getTheme() === 'light';
+  btn.setAttribute('aria-pressed', String(isLight));
+  btn.setAttribute('aria-label', isLight ? 'Switch to dark theme' : 'Switch to light theme');
+  btn.title = isLight ? 'Switch to dark theme' : 'Switch to light theme';
+}
+function setTheme(theme){
+  document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
+  try{ localStorage.setItem(THEME_STORAGE_KEY, theme); }catch(_){}
+  applyThemeToToggle();
+  document.dispatchEvent(new CustomEvent('srg-theme-change', { detail:{ theme } }));
+}
+(function initThemeToggle(){
+  applyThemeToToggle();
+  const btn = document.getElementById('theme-toggle');
+  if(btn) btn.addEventListener('click', ()=> setTheme(getTheme()==='light' ? 'dark' : 'light'));
+  // If the user never made an explicit choice, keep following the OS setting live.
+  if(window.matchMedia){
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    const onSystemChange=(e)=>{
+      let stored=null; try{ stored=localStorage.getItem(THEME_STORAGE_KEY); }catch(_){}
+      if(stored==='light'||stored==='dark') return;
+      setTheme(e.matches ? 'light' : 'dark');
+    };
+    if(mq.addEventListener) mq.addEventListener('change', onSystemChange);
+    else if(mq.addListener) mq.addListener(onSystemChange);
+  }
+})();
+
 // ═══════════════ CLOCK ═══════════════
 function utcStr(){return new Date().toUTCString().split(' ')[4]+' UTC';}
 setInterval(()=>{
@@ -466,9 +519,9 @@ async function tickTel(){
     renderDataLog();
     telemetryState.lastPacketTime=Date.now();
   }
-  drawSpark('sp-t',tHist,'rgba(79,195,247,.9)','rgba(79,195,247,.06)');
-  drawSpark('sp-tmp',tmpHist,'rgba(255,193,7,.85)','rgba(255,193,7,.06)');
-  drawSpark('sp-a',aHist,'rgba(79,195,247,.75)','rgba(79,195,247,.05)');
+  drawSpark('sp-t',tHist,hexA(cssVar('--cyan'),.9),hexA(cssVar('--cyan'),.08));
+  drawSpark('sp-tmp',tmpHist,hexA(cssVar('--amber'),.85),hexA(cssVar('--amber'),.08));
+  drawSpark('sp-a',aHist,hexA(cssVar('--cyan'),.75),hexA(cssVar('--cyan'),.07));
 
   if(hasData&&frames%4===0) tlog(`PKT#${pkts} MS5611:[T:${temp}°C P:${press}hPa] MPU:[GY:${fmt(gx)},${fmt(gy)},${fmt(gz)}] IHU:${fmt(tmp)}°C D3:${diodeVal!=null?fmt(diodeVal):'--'}°C`,'tok');
   if(hasData&&frames%30===0) tlog('FRAME SYNC OK — APRS CRC VERIFIED','tsys');
@@ -514,7 +567,7 @@ function drawSpark(id,data,stroke,fill){
   const ctx=c.getContext('2d'),w=c.width,h=c.height;
   ctx.clearRect(0,0,w,h);
 
-  ctx.strokeStyle='rgba(79,195,247,.06)';ctx.lineWidth=.5;
+  ctx.strokeStyle=hexA(cssVar('--cyan'),.08);ctx.lineWidth=.5;
   for(let y=0;y<h;y+=h/4){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
 
   const mn=Math.min(...data)-.3,mx=Math.max(...data)+.3,rng=mx-mn||1;
@@ -549,6 +602,17 @@ const _attCtx    = _attCanvas ? _attCanvas.getContext('2d') : null;
 const _AW = _attCanvas ? _attCanvas.width  : 120;
 const _AH = _attCanvas ? _attCanvas.height : 120;
 const _AR = _AW / 2 - 6;
+
+// Sky/ground/pointer colors stay fixed across themes — a real artificial
+// horizon always reads blue-over-brown regardless of cockpit lighting — but
+// the outer bezel ring should match whichever theme's border tone is active,
+// so it doesn't read as a stray dark ring floating on a light panel.
+let _attRingColor = '#3d5578';
+function refreshInstrumentColors(){
+  _attRingColor = cssVar('--border-hi') || _attRingColor;
+}
+refreshInstrumentColors();
+document.addEventListener('srg-theme-change', refreshInstrumentColors);
 
 function drawAttitude(roll, pitch){
   if(!_attCtx) return;
@@ -589,7 +653,7 @@ function drawAttitude(roll, pitch){
 
   // Outer ring
   _attCtx.restore();
-  _attCtx.strokeStyle='#3d5578';
+  _attCtx.strokeStyle=_attRingColor;
   _attCtx.lineWidth=2;
   _attCtx.beginPath();
   _attCtx.arc(_AW/2,_AH/2,_AR,0,Math.PI*2);
