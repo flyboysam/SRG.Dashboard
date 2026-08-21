@@ -1,35 +1,41 @@
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
 
 :root {
-  /* Mission control — deep navy, restrained accents. Color is reserved for meaning
-     (status/severity), not decoration. */
-  --bg: #0a0e17;
-  --bg-1: #0c111d;
-  --bg-2: #0f1524;
-  --panel: linear-gradient(180deg, #101828 0%, #0c111c 100%);
-  --panel-alt: linear-gradient(180deg, #12192a 0%, #0d1220 100%);
-  --border: rgba(150, 178, 214, .14);
-  --border-hi: rgba(150, 178, 214, .30);
-  --border-accent: rgba(86, 176, 232, .38);
+  /* Mission control surface stack — each level is a deliberate step brighter than
+     the one below it, so background → panel → subsection → field → value reads
+     at a glance. Color is reserved for meaning (status/severity), not decoration. */
+  --bg: #0a1120;
+  --bg-1: #0c1526;
+  --bg-2: #0e192c;
 
-  --text: #dbe6f3;
-  --text-dim: rgba(219, 230, 243, .58);
-  --text-faint: rgba(219, 230, 243, .34);
+  --panel: linear-gradient(180deg, #1a2740 0%, #141f36 100%);
+  --panel-solid: #17233c;
+  --panel-2: #1f2e4a;
+  --panel-3: #28395a;
 
-  --cyan: #4fc3f7;
-  --cyan-dim: rgba(79, 195, 247, .65);
-  --amber: #e0a851;
-  --amber-dim: rgba(224, 168, 81, .7);
-  --green: #3ecf8e;
-  --green-dim: rgba(62, 207, 142, .7);
-  --red: #e5484d;
-  --red-dim: rgba(229, 72, 77, .7);
-  --muted: rgba(210, 225, 245, .38);
-  --violet: #a78bfa;
-  --violet-dim: rgba(167, 139, 250, .7);
+  --border: rgba(163, 190, 224, .22);
+  --border-hi: rgba(163, 190, 224, .42);
+  --border-accent: rgba(94, 200, 251, .55);
 
-  --radius: 2px;
-  --shadow-panel: 0 1px 2px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.02);
+  --text: #f2f6fc;
+  --text-dim: #b7c6df;
+  --text-faint: #93a7c6;
+
+  --cyan: #5ec8fb;
+  --cyan-dim: rgba(94, 200, 251, .72);
+  --amber: #ffb648;
+  --amber-dim: rgba(255, 182, 72, .72);
+  --green: #3ddc97;
+  --green-dim: rgba(61, 220, 151, .72);
+  --red: #ff6b6b;
+  --red-dim: rgba(255, 107, 107, .72);
+  --muted: rgba(183, 198, 223, .55);
+  --violet: #b39bfb;
+  --violet-dim: rgba(179, 155, 251, .72);
+
+  --radius: 4px;
+  --shadow-panel: 0 2px 10px rgba(2, 6, 14, .45), inset 0 1px 0 rgba(255, 255, 255, .035);
+  --shadow-lift: 0 4px 18px rgba(2, 6, 14, .55), inset 0 1px 0 rgba(255, 255, 255, .04);
 }
 
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
@@ -41,10 +47,10 @@ html, body {
   font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
 }
 
-/* Vignette — very light edge falloff, no color tint */
+/* Vignette — light edge falloff, kept subtle now that surfaces carry the contrast */
 .vignette {
   position:fixed; inset:0; pointer-events:none; z-index:9989;
-  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.32) 100%);
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,.28) 100%);
 }
 
 /* ── Motion — kept minimal and purposeful (status attention only) ── */
@@ -61,13 +67,13 @@ html, body {
 /* ════════════════════════════════
    STARFIELD (very low-opacity ambient background, drawn in app.js)
 ════════════════════════════════ */
-#sf { position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.55; }
+#sf { position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.4; }
 
 /* ════════════════════════════════
    DASHBOARD SHELL
 ════════════════════════════════ */
 #dash {
-  display:flex; flex-direction:column; gap:4px; padding:4px;
+  display:flex; flex-direction:column; gap:6px; padding:6px;
   position:fixed; inset:0; z-index:100;
   animation: fade-in .4s ease both;
 }
@@ -76,27 +82,29 @@ html, body {
 /* ── NAVBAR ── */
 .nb {
   display:flex; align-items:center; justify-content:space-between;
-  padding:8px 18px; flex-shrink:0;
+  padding:9px 18px; flex-shrink:0;
   background: var(--panel);
   border:1px solid var(--border);
-  border-top:none;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
 }
 
 .nb-left { display:flex; align-items:center; gap:0; }
-.nb-tabs { display:flex; gap:2px; margin-right:20px; }
+.nb-tabs { display:flex; gap:4px; margin-right:20px; }
 .nb-tab {
   background:transparent; border:1px solid var(--border);
+  border-radius: 3px;
   color:var(--text-dim); font-family:'Barlow Condensed',sans-serif;
   font-weight:600; font-size:10px; letter-spacing:1.5px;
   padding:6px 14px; cursor:pointer; transition:border-color .15s, color .15s, background .15s;
   text-transform:uppercase;
 }
-.nb-tab:hover { border-color:var(--border-hi); color:var(--text); }
-.nb-tab:focus-visible { outline:1px solid var(--cyan); outline-offset:1px; }
-.nb-tab.act { border-color:var(--border-accent); color:var(--cyan); background:rgba(79,195,247,.08); }
+.nb-tab:hover { border-color:var(--border-hi); color:var(--text); background:rgba(255,255,255,.04); }
+.nb-tab:focus-visible { outline:2px solid var(--cyan); outline-offset:1px; }
+.nb-tab.act { border-color:var(--border-accent); color:var(--cyan); background:rgba(94,200,251,.14); }
 
 .nb-missionid {
-  font-family:'Barlow Condensed',sans-serif; font-size:14px; font-weight:700;
+  font-family:'Barlow Condensed',sans-serif; font-size:15px; font-weight:700;
   letter-spacing:2.5px; color:var(--text);
   padding-right:16px; border-right:1px solid var(--border);
   text-transform:uppercase;
@@ -114,41 +122,43 @@ html, body {
 .nb-right { display:flex; align-items:center; gap:16px; }
 .nstat { text-align:center; }
 .nstat .nv {
-  display:block; font-family:'JetBrains Mono',monospace; font-size:12px;
+  display:block; font-family:'JetBrains Mono',monospace; font-size:12.5px;
   font-weight:600; color:var(--text);
 }
 .nstat .nl { font-size:8px; letter-spacing:1.5px; color:var(--text-faint); font-family:'Barlow Condensed',sans-serif; font-weight:600; }
 
 .nb-div { width:1px; height:26px; background:var(--border); }
 
-/* Connection status pill — the single, unambiguous source of truth for link state */
+/* Connection status pill — the single, unambiguous source of truth for link state.
+   Each state gets a filled background, not just a tinted border, so it reads
+   instantly without depending on color alone (text label always present). */
 .conn-status {
   display:flex; align-items:center; gap:8px;
-  padding:6px 12px; border:1px solid var(--border-hi);
-  background:rgba(255,255,255,.02);
-  font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:10px;
+  padding:7px 13px; border:1px solid var(--border-hi); border-radius: 3px;
+  background:rgba(163,190,224,.06);
+  font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:10.5px;
   letter-spacing:2px; text-transform:uppercase;
 }
-.conn-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; background:var(--muted); }
-.conn-status[data-state="connecting"] { border-color:rgba(224,168,81,.4); }
-.conn-status[data-state="connecting"] .conn-dot { background:var(--amber); animation:pulse-soft 1.1s ease infinite; }
+.conn-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; background:var(--muted); box-shadow:0 0 0 3px rgba(163,190,224,.12); }
+.conn-status[data-state="connecting"] { border-color:rgba(255,182,72,.55); background:rgba(255,182,72,.12); }
+.conn-status[data-state="connecting"] .conn-dot { background:var(--amber); box-shadow:0 0 0 3px rgba(255,182,72,.18); animation:pulse-soft 1.1s ease infinite; }
 .conn-status[data-state="connecting"] .conn-text { color:var(--amber); }
-.conn-status[data-state="connected"] { border-color:rgba(62,207,142,.4); }
-.conn-status[data-state="connected"] .conn-dot { background:var(--green); }
+.conn-status[data-state="connected"] { border-color:rgba(61,220,151,.55); background:rgba(61,220,151,.12); }
+.conn-status[data-state="connected"] .conn-dot { background:var(--green); box-shadow:0 0 0 3px rgba(61,220,151,.18); }
 .conn-status[data-state="connected"] .conn-text { color:var(--green); }
-.conn-status[data-state="disconnected"] { border-color:rgba(229,72,77,.4); }
-.conn-status[data-state="disconnected"] .conn-dot { background:var(--red); animation:pulse-soft 1.6s ease infinite; }
+.conn-status[data-state="disconnected"] { border-color:rgba(255,107,107,.6); background:rgba(255,107,107,.14); }
+.conn-status[data-state="disconnected"] .conn-dot { background:var(--red); box-shadow:0 0 0 3px rgba(255,107,107,.2); animation:pulse-soft 1.6s ease infinite; }
 .conn-status[data-state="disconnected"] .conn-text { color:var(--red); }
-.conn-status[data-state="test"] { border-color:rgba(167,139,250,.4); }
-.conn-status[data-state="test"] .conn-dot { background:var(--violet); animation:pulse-soft 1.6s ease infinite; }
+.conn-status[data-state="test"] { border-color:rgba(179,155,251,.55); background:rgba(179,155,251,.12); }
+.conn-status[data-state="test"] .conn-dot { background:var(--violet); box-shadow:0 0 0 3px rgba(179,155,251,.18); animation:pulse-soft 1.6s ease infinite; }
 .conn-status[data-state="test"] .conn-text { color:var(--violet); }
 
 /* ── MAIN GRID ── */
 .mgrid {
   display:grid;
-  grid-template-columns: 270px 1fr 270px;
-  grid-template-rows: 1fr 1fr minmax(100px, auto);
-  gap:4px; flex:1; min-height:0;
+  grid-template-columns: 280px 1fr 280px;
+  grid-template-rows: 1fr 1fr minmax(108px, auto);
+  gap:6px; flex:1; min-height:0;
 }
 
 /* ── PANEL ── */
@@ -156,73 +166,82 @@ html, body {
   background: var(--panel);
   border:1px solid var(--border);
   border-radius: var(--radius);
-  padding:14px 16px;
+  padding:0 16px 14px;
   position:relative; overflow:hidden;
   box-shadow: var(--shadow-panel);
+  display:flex; flex-direction:column;
 }
 
 /* Corner ticks — a restrained instrument-panel motif, static (no animation) */
 .pnl .hud-tl, .pnl .hud-tr, .pnl .hud-bl, .pnl .hud-br {
-  position:absolute; width:9px; height:9px; z-index:2; opacity:.6;
+  position:absolute; width:9px; height:9px; z-index:2; opacity:.75;
 }
 .pnl .hud-tl { top:0; left:0; border-top:1.5px solid var(--cyan-dim); border-left:1.5px solid var(--cyan-dim); }
 .pnl .hud-tr { top:0; right:0; border-top:1.5px solid var(--cyan-dim); border-right:1.5px solid var(--cyan-dim); }
 .pnl .hud-bl { bottom:0; left:0; border-bottom:1.5px solid var(--cyan-dim); border-left:1.5px solid var(--cyan-dim); }
 .pnl .hud-br { bottom:0; right:0; border-bottom:1.5px solid var(--cyan-dim); border-right:1.5px solid var(--cyan-dim); }
 
-/* Power-system panels (Battery, Solar) — amber accent, matches convention of
-   flagging power telemetry distinctly from attitude/environment sensors */
+/* Power-system panels (Battery, Solar) — amber accent identifies the power
+   subsystem group at a glance, distinct from attitude/environment sensors.
+   Actual status readouts (STATUS/CHARGE) still use semantic gn/rd/mt colors. */
 .pnl-gold .hud-tl, .pnl-gold .hud-tr, .pnl-gold .hud-bl, .pnl-gold .hud-br { border-color: var(--amber-dim); }
+.pnl-gold .pt { border-bottom-color: rgba(255,182,72,.28); }
 .sys-strip { align-items:stretch; }
-.pnl-sys { padding:12px 14px; }
-.gyro-strip { display:flex; gap:10px; flex-wrap:wrap; margin-top:6px; }
-.gyro-item { display:flex; flex-direction:column; gap:2px; padding:7px 12px; background:rgba(79,195,247,.04); border:1px solid var(--border); }
+.pnl-sys { padding:0 14px 12px; }
+.gyro-strip { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
+.gyro-item { display:flex; flex-direction:column; gap:3px; padding:8px 13px; background:var(--panel-2); border:1px solid var(--border); border-radius:3px; }
 .gyro-l { font-size:8px; letter-spacing:1.5px; color:var(--text-faint); font-family:'Barlow Condensed',sans-serif; font-weight:700; }
-.gyro-v { font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:600; color:var(--cyan); }
+.gyro-v { font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:600; color:var(--cyan); }
 .gyro-v.yw { color:var(--amber); }
 
+/* Panel header — its own tonal bar so the title reads as a level of the
+   hierarchy above the data inside the panel, not just a caption. */
 .pt {
   font-family:'Barlow Condensed',sans-serif; font-weight:700;
-  font-size:11px; letter-spacing:2.5px;
-  margin-bottom:12px; text-transform:uppercase;
+  font-size:11.5px; letter-spacing:2.5px;
+  margin:0 -16px 12px; padding:11px 16px 10px; text-transform:uppercase;
   display:flex; align-items:center; gap:8px;
   color:var(--text);
-  padding-bottom:8px; border-bottom:1px solid var(--border);
+  background: var(--panel-2);
+  border-bottom:1px solid var(--border-hi);
+  border-radius: var(--radius) var(--radius) 0 0;
 }
+.pnl-sys .pt { margin:0 -14px 11px; padding:10px 14px 9px; }
 .pt .chip {
-  font-size:7.5px; letter-spacing:1.5px; padding:2px 7px;
-  background:rgba(224,168,81,.1);
-  border:1px solid rgba(224,168,81,.3);
+  font-size:7.5px; letter-spacing:1.5px; padding:2.5px 7px; border-radius:2px;
+  background:rgba(255,182,72,.14);
+  border:1px solid rgba(255,182,72,.4);
   color:var(--amber);
   font-weight:700;
 }
 .pt .status-led {
   width:6px; height:6px; border-radius:50%;
   background:var(--green);
+  box-shadow:0 0 0 3px rgba(61,220,151,.18);
   margin-left:1px; flex-shrink:0;
 }
 .pt::after { content:''; flex:1; }
 
 /* Big values — the primary read at a glance. Flat color, no glow, tabular numerals. */
 .bv {
-  font-family:'JetBrains Mono',monospace; font-size:32px; font-weight:600;
-  color:var(--text); line-height:1.1; letter-spacing:.5px;
+  font-family:'JetBrains Mono',monospace; font-size:34px; font-weight:700;
+  color:var(--text); line-height:1.1; letter-spacing:.3px;
   font-variant-numeric: tabular-nums;
 }
 .bv.cy { color:var(--cyan); }
 .bv.yw { color:var(--amber); }
-.bu { font-size:12px; color:var(--text-dim); margin-left:4px; font-family:'Barlow Condensed',sans-serif; }
+.bu { font-size:12.5px; color:var(--text-dim); margin-left:4px; font-family:'Barlow Condensed',sans-serif; font-weight:600; }
 .bl { font-family:'Barlow Condensed',sans-serif; font-size:9px; letter-spacing:2px; color:var(--text-faint); margin-top:4px; text-transform:uppercase; }
 
 /* Data rows */
 .sr {
   display:flex; justify-content:space-between; align-items:center;
-  padding:6px 0; border-bottom:1px solid rgba(150,178,214,.07);
+  padding:6.5px 0; border-bottom:1px solid rgba(163,190,224,.12);
   gap:12px;
 }
 .sr:last-child { border-bottom:none; }
-.sl { font-family:'Barlow Condensed',sans-serif; font-weight:600; font-size:9.5px; letter-spacing:1.5px; color:var(--text-dim); text-transform:uppercase; flex-shrink:0; }
-.sv { font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:500; color:var(--text); letter-spacing:.3px; font-variant-numeric: tabular-nums; }
+.sl { font-family:'Barlow Condensed',sans-serif; font-weight:600; font-size:9.5px; letter-spacing:1.5px; color:var(--text-faint); text-transform:uppercase; flex-shrink:0; }
+.sv { font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600; color:var(--text); letter-spacing:.3px; font-variant-numeric: tabular-nums; }
 .sv.cy { color:var(--cyan); }
 .sv.gn { color:var(--green); }
 .sv.yw { color:var(--amber); }
@@ -231,9 +250,10 @@ html, body {
 
 /* Gauge */
 .gb {
-  height:5px; margin-top:6px; overflow:hidden; position:relative;
-  background: rgba(150,178,214,.08);
+  height:6px; margin-top:6px; overflow:hidden; position:relative;
+  background: rgba(163,190,224,.12);
   border:1px solid var(--border);
+  border-radius:2px;
 }
 .gf {
   height:100%; min-width:0;
@@ -244,13 +264,13 @@ html, body {
 .gf.yw { background: var(--amber); }
 
 /* IMU cells */
-.imgrid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:8px; }
+.imgrid { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:8px; }
 .icell {
-  padding:8px 10px; border:1px solid var(--border);
-  background:rgba(255,255,255,.015);
-  transition:border-color .15s;
+  padding:8px 10px; border:1px solid var(--border); border-radius:3px;
+  background: var(--panel-2);
+  transition:border-color .15s, background .15s;
 }
-.icell:hover { border-color:var(--border-hi); }
+.icell:hover { border-color:var(--border-hi); background:var(--panel-3); }
 .ic-l { font-family:'Barlow Condensed',sans-serif; font-weight:600; font-size:8px; letter-spacing:1.5px; color:var(--text-faint); text-transform:uppercase; }
 .ic-v { font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:600; color:var(--text); margin-top:4px; letter-spacing:.3px; font-variant-numeric: tabular-nums; }
 .ic-v.gn { color:var(--green); }
@@ -261,27 +281,36 @@ html, body {
 .splbl { font-family:'Barlow Condensed',sans-serif; font-weight:600; font-size:8px; letter-spacing:1.5px; color:var(--text-faint); margin-bottom:4px; text-transform:uppercase; }
 canvas.sp { display:block; width:100%; height:32px; }
 
-/* Terminal — event log + interactive command console share one scrolling pane */
+/* ── MISSION TERMINAL ──
+   The single most important panel: a brighter accent border marks it as the
+   primary console, and the input row is built to look like a real command bar. */
+.term-pnl { border-color: var(--border-accent); box-shadow: var(--shadow-lift); }
+.term-pnl .pt { background: linear-gradient(180deg, rgba(94,200,251,.14) 0%, var(--panel-2) 100%); }
+
 .term-body { display:flex; flex-direction:column; flex:1; min-height:0; }
 .tlog {
   flex:1; min-height:0; overflow-y:auto;
-  font-family:'JetBrains Mono',monospace; font-size:10.5px; line-height:1.85;
+  font-family:'JetBrains Mono',monospace; font-size:11px; line-height:1.9;
   color:var(--text-dim);
 }
-.tlog::-webkit-scrollbar { width:4px; }
+.tlog::-webkit-scrollbar { width:5px; }
 .tlog::-webkit-scrollbar-track { background:transparent; }
-.tlog::-webkit-scrollbar-thumb { background:var(--border-hi); }
+.tlog::-webkit-scrollbar-thumb { background:var(--border-hi); border-radius:3px; }
 .tlog::-webkit-scrollbar-thumb:hover { background:var(--cyan-dim); }
-.tr2 { display:flex; gap:10px; padding:2px 4px; }
-.tr2:hover { background:rgba(255,255,255,.02); }
-.tr2-plain { padding-left:4px; }
+.tr2 { display:flex; gap:10px; padding:2.5px 6px; border-radius:2px; border-left:2px solid transparent; }
+.tr2:hover { background:rgba(255,255,255,.03); }
+.tr2-plain { padding-left:6px; }
+/* Errors and warnings get their own row treatment (background + rail), not just
+   colored text, so they're unmistakable even to a glance at the whole panel. */
+.tr2:has(.twn), .tr2:has(.ttag-error) { background:rgba(255,182,72,.06); border-left-color:rgba(255,182,72,.5); }
+.tr2:has(.terr) { background:rgba(255,107,107,.07); border-left-color:rgba(255,107,107,.55); }
 .tts { color:var(--text-faint); flex-shrink:0; }
-.tok { color:var(--green); }
+.tok { color:var(--green); font-weight:500; }
 .tinf { color:var(--cyan); }
-.twn { color:var(--amber); }
-.terr { color:var(--red); }
+.twn { color:var(--amber); font-weight:500; }
+.terr { color:var(--red); font-weight:500; }
 .tsys { color:var(--text-faint); }
-.tcmd { color:var(--text); font-weight:600; }
+.tcmd { color:var(--text); font-weight:700; }
 .tcmd-hint { color:var(--cyan); font-weight:600; }
 .tresp { color:var(--text-dim); white-space:pre-wrap; }
 
@@ -292,12 +321,15 @@ canvas.sp { display:block; width:100%; height:32px; }
 .ttag-transmitted { color:var(--amber); font-weight:700; letter-spacing:1px; }
 .ttag-received { color:var(--green); font-weight:700; letter-spacing:1px; }
 
-/* Command input row */
+/* Command input row — styled as an actual command bar, not text on the panel edge */
 .term-inputrow {
-  display:flex; align-items:center; gap:8px; flex-shrink:0;
-  padding:8px 4px 2px; margin-top:4px; border-top:1px solid var(--border);
-  font-family:'JetBrains Mono',monospace; font-size:11px;
+  display:flex; align-items:center; gap:9px; flex-shrink:0;
+  padding:9px 12px; margin-top:8px; border-radius:3px;
+  background: var(--panel-2);
+  border:1px solid var(--border-hi);
+  font-family:'JetBrains Mono',monospace; font-size:11.5px;
 }
+.term-inputrow:focus-within { border-color:var(--cyan); box-shadow:0 0 0 2px rgba(94,200,251,.15); }
 .term-prompt { color:var(--cyan); font-weight:700; flex-shrink:0; user-select:none; }
 .term-input {
   flex:1; min-width:0; background:transparent; border:none; outline:none;
@@ -309,42 +341,43 @@ canvas.sp { display:block; width:100%; height:32px; }
 
 /* Terminal header chip — reflects whether responses are backed by real or mock data.
    (Scoped as .pt .chip.modifier so it outranks the base ".pt .chip" amber default.) */
-.pt .chip.chip-local { background:rgba(79,195,247,.1); border-color:rgba(79,195,247,.35); color:var(--cyan); }
-.pt .chip.chip-mock { background:rgba(167,139,250,.1); border-color:rgba(167,139,250,.35); color:var(--violet); }
+.pt .chip.chip-local { background:rgba(94,200,251,.14); border-color:rgba(94,200,251,.45); color:var(--cyan); }
+.pt .chip.chip-mock { background:rgba(179,155,251,.14); border-color:rgba(179,155,251,.45); color:var(--violet); }
 
 /* Bottom bar */
 .bbar {
   display:flex; align-items:center; justify-content:space-between;
-  padding:7px 18px; flex-shrink:0;
+  padding:8px 18px; flex-shrink:0;
   background: var(--panel);
   border:1px solid var(--border);
-  border-bottom:none;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
 }
 .rawstr { font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--text-faint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .rawstr span { color:var(--text-dim); }
 .pstat { display:flex; align-items:center; gap:8px; color:var(--text-dim); font-size:9.5px; letter-spacing:1.5px; font-family:'Barlow Condensed',sans-serif; font-weight:700; flex-shrink:0; }
 .data-mode {
   font-family:'Barlow Condensed',sans-serif; font-size:8.5px; font-weight:700;
-  letter-spacing:1.5px; padding:3px 9px; margin-left:6px;
+  letter-spacing:1.5px; padding:3.5px 9px; margin-left:6px; border-radius:2px;
   border:1px solid var(--border);
 }
-.data-mode.none { color:var(--muted); border-color:var(--border); }
-.data-mode.cloud { color:var(--cyan); border-color:rgba(79,195,247,.4); background:rgba(79,195,247,.06); }
-.data-mode.offline { color:var(--red); border-color:rgba(229,72,77,.4); background:rgba(229,72,77,.06); }
-.data-mode.test { color:var(--violet); border-color:rgba(167,139,250,.4); background:rgba(167,139,250,.06); }
+.data-mode.none { color:var(--muted); border-color:var(--border); background:rgba(163,190,224,.06); }
+.data-mode.cloud { color:var(--cyan); border-color:rgba(94,200,251,.5); background:rgba(94,200,251,.12); }
+.data-mode.offline { color:var(--red); border-color:rgba(255,107,107,.5); background:rgba(255,107,107,.13); }
+.data-mode.test { color:var(--violet); border-color:rgba(179,155,251,.5); background:rgba(179,155,251,.12); }
 .reconnect-btn, .testdata-btn {
-  background:transparent; border:1px solid var(--border);
+  background:transparent; border:1px solid var(--border); border-radius:3px;
   color:var(--text-dim); font-family:'Barlow Condensed',sans-serif;
   font-weight:700; font-size:9.5px; letter-spacing:1.5px;
-  padding:4px 11px; margin-left:8px; cursor:pointer;
+  padding:4.5px 11px; margin-left:8px; cursor:pointer;
   transition:border-color .15s, color .15s, background .15s; text-transform:uppercase;
 }
-.reconnect-btn:hover, .testdata-btn:hover { border-color:var(--border-hi); color:var(--text); background:rgba(255,255,255,.03); }
-.reconnect-btn:focus-visible, .testdata-btn:focus-visible { outline:1px solid var(--cyan); outline-offset:1px; }
-.reconnect-btn.trying { color:var(--amber); border-color:rgba(224,168,81,.4); pointer-events:none; }
-.testdata-btn { color:var(--violet-dim); border-color:rgba(167,139,250,.3); }
-.testdata-btn:hover { border-color:var(--violet); color:var(--violet); background:rgba(167,139,250,.06); }
-.testdata-btn.active { color:var(--violet); border-color:var(--violet); background:rgba(167,139,250,.1); }
+.reconnect-btn:hover, .testdata-btn:hover { border-color:var(--border-hi); color:var(--text); background:rgba(255,255,255,.05); }
+.reconnect-btn:focus-visible, .testdata-btn:focus-visible { outline:2px solid var(--cyan); outline-offset:1px; }
+.reconnect-btn.trying { color:var(--amber); border-color:rgba(255,182,72,.5); background:rgba(255,182,72,.1); pointer-events:none; }
+.testdata-btn { color:var(--violet-dim); border-color:rgba(179,155,251,.35); }
+.testdata-btn:hover { border-color:var(--violet); color:var(--violet); background:rgba(179,155,251,.1); }
+.testdata-btn.active { color:var(--violet); border-color:var(--violet); background:rgba(179,155,251,.16); }
 .dclk { color:var(--text-faint); font-size:9.5px; letter-spacing:1px; font-family:'JetBrains Mono',monospace; font-weight:500; flex-shrink:0; }
 
 /* ── DATA LOG VIEW ── */
@@ -375,16 +408,19 @@ canvas.sp { display:block; width:100%; height:32px; }
   display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px;
 }
 .datalog-section {
-  background:var(--panel); border:1px solid var(--border); padding:14px 16px;
+  background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
+  padding:0 16px 14px; box-shadow: var(--shadow-panel);
 }
 .datalog-section-title {
   font-family:'Barlow Condensed',sans-serif; font-size:9.5px; font-weight:700; letter-spacing:2px;
-  color:var(--text-dim); margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--border);
+  color:var(--text-dim); margin:0 -16px 12px; padding:10px 16px 9px;
+  background:var(--panel-2); border-bottom:1px solid var(--border-hi);
+  border-radius:var(--radius) var(--radius) 0 0;
   text-transform:uppercase;
 }
 .datalog-row {
   display:flex; justify-content:space-between; align-items:center;
-  padding:6px 0; border-bottom:1px solid rgba(150,178,214,.06);
+  padding:6px 0; border-bottom:1px solid rgba(163,190,224,.1);
   font-size:12px;
 }
 .datalog-row:last-child { border-bottom:none; }
@@ -402,7 +438,7 @@ canvas.sp { display:block; width:100%; height:32px; }
 
 /* ── Responsive behavior ── */
 @media (max-width: 1100px) {
-  .mgrid { grid-template-columns: 220px 1fr 220px; }
+  .mgrid { grid-template-columns: 230px 1fr 230px; }
   .nb-meta { display:none; }
 }
 @media (max-width: 900px) {
@@ -411,5 +447,17 @@ canvas.sp { display:block; width:100%; height:32px; }
   .nb { flex-wrap:wrap; gap:8px; row-gap:8px; }
   .nb-right { flex-wrap:wrap; row-gap:8px; }
   .mgrid { grid-template-columns:1fr; grid-template-rows:none; }
+  /* Panels carry explicit grid-column/grid-row placement (inline, for the desktop
+     3-column layout) which would otherwise force implicit extra columns even
+     under a single 1fr track — pin every direct child back to column 1 so the
+     dashboard actually stacks instead of staying side-by-side and squeezed. */
+  .mgrid > .pnl, .mgrid > .sys-strip { grid-column:1 !important; grid-row:auto !important; }
+  .term-pnl { min-height:360px; }
   .sys-strip { flex-direction:column; }
+  /* Bottom bar packs a raw-frame string, status buttons and a clock into one
+     nowrap row — on a narrow viewport that row is wider than the page and
+     drags every panel above it into horizontal overflow. Let it wrap. */
+  .bbar { flex-wrap:wrap; row-gap:8px; }
+  .rawstr { white-space:normal; overflow-wrap:anywhere; }
+  .pstat { flex-wrap:wrap; row-gap:6px; }
 }

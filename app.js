@@ -589,7 +589,7 @@ function drawAttitude(roll, pitch){
 
   // Outer ring
   _attCtx.restore();
-  _attCtx.strokeStyle='#1A3050';
+  _attCtx.strokeStyle='#3d5578';
   _attCtx.lineWidth=2;
   _attCtx.beginPath();
   _attCtx.arc(_AW/2,_AH/2,_AR,0,Math.PI*2);
