@@ -128,17 +128,24 @@ html, body {
 body, .nb, .bbar, .pnl, .pt, .sr, .gb, .icell, .gyro-item, .nb-tab, .conn-status,
 .conn-dot, .term-inputrow, .term-input, .tr2, .data-mode, .reconnect-btn,
 .testdata-btn, .theme-toggle, .datalog-section, .datalog-section-title,
-.datalog-row, .vignette, #sf {
+.datalog-row, .vignette, #sf, .sv, .bv, .ic-v, .gyro-v, .met-v, .dclk,
+.pt .status-led, .pt .chip {
   transition: background-color .16s ease, border-color .16s ease, color .16s ease,
               box-shadow .16s ease, opacity .16s ease;
 }
+
+/* Reduced motion: the industry-standard universal override — collapse every
+   animation/transition to effectively-instant rather than hand-maintaining a
+   list of selectors. One-shot animations (entrances, flashes) land on their
+   end state immediately; looping ones (pulses, spin) settle on one fast cycle
+   and stop. Nothing about the dashboard's information depends on motion, so
+   this is always safe. */
 @media (prefers-reduced-motion: reduce) {
-  body, .nb, .bbar, .pnl, .pt, .sr, .gb, .icell, .gyro-item, .nb-tab, .conn-status,
-  .conn-dot, .term-inputrow, .term-input, .tr2, .data-mode, .reconnect-btn,
-  .testdata-btn, .theme-toggle, .datalog-section, .datalog-section-title,
-  .datalog-row, .vignette, #sf, #dash, #dash .mgrid {
-    transition: none !important;
-    animation: none !important;
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -149,16 +156,29 @@ body, .nb, .bbar, .pnl, .pt, .sr, .gb, .icell, .gyro-item, .nb-tab, .conn-status
   background: radial-gradient(ellipse at center, transparent 60%, var(--vignette) 100%);
 }
 
-/* ── Motion — kept minimal and purposeful (status attention only) ── */
+/* ── Motion — kept minimal and purposeful: entrance, status, and "new data
+   arrived" cues only. Nothing loops faster than ~1s, nothing scales beyond a
+   few percent, nothing conveys information motion alone doesn't also say
+   through text/color. ── */
 @keyframes pulse-soft { 0%,100%{opacity:1} 50%{opacity:.45} }
-@keyframes dash-appear { from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
-@keyframes fade-in { from{opacity:0;} to{opacity:1;} }
+@keyframes panel-in { from{opacity:0; transform:translateY(7px);} to{opacity:1; transform:translateY(0);} }
+@keyframes val-flash { from{background-color:var(--cyan-bg);} to{background-color:transparent;} }
+@keyframes log-in { from{opacity:0; transform:translateY(3px);} to{opacity:1; transform:translateY(0);} }
+@keyframes conn-breathe { 0%,100%{box-shadow:0 0 0 3px var(--green-bg);} 50%{box-shadow:0 0 0 6px transparent;} }
+@keyframes spin-cw { to{transform:rotate(360deg);} }
+@keyframes submit-flash { from{box-shadow:0 0 0 2px var(--cyan-bg);} to{box-shadow:0 0 0 0 transparent;} }
 
 .pdot {
   display:inline-block; width:6px; height:6px; border-radius:50%;
   background:var(--cyan); flex-shrink:0;
   animation: pulse-soft 2.2s ease infinite;
 }
+
+/* A value just changed — a brief neutral wash (not a color-coded one; status
+   color is already carried by the text itself) says "new telemetry landed"
+   without fighting the value's own gn/rd/yw meaning. Applied by set()/
+   imuCell()/statEl() in app.js, and only when the text actually changed. */
+.val-flash { animation: val-flash .55s ease-out; border-radius:2px; }
 
 /* ════════════════════════════════
    STARFIELD (very low-opacity ambient background, drawn in app.js)
@@ -177,9 +197,39 @@ body, .nb, .bbar, .pnl, .pt, .sr, .gb, .icell, .gyro-item, .nb-tab, .conn-status
 #dash {
   display:flex; flex-direction:column; gap:6px; padding:6px;
   position:fixed; inset:0; z-index:100;
-  animation: fade-in .4s ease both;
 }
-#dash .mgrid { animation: dash-appear .5s cubic-bezier(.22,1,.36,1) .05s both; }
+
+/* Initial load — a quick, coordinated settle-in rather than one whole-shell
+   fade. Each region animates independently (opacity/transform only, so
+   nothing reflows and nothing blocks interaction while it plays) with a
+   small stagger: chrome first, flanking columns and terminal together,
+   the power/attitude strip last. Total spread is ~360ms end-to-end.
+
+   Fail-safe by construction: elements are only ever hidden while #dash
+   carries the .entering class (set in the HTML from first paint), never as
+   a bare/unconditional rule. app.js removes that class on a plain timer once
+   the sequence has had time to finish — so even in a browser/context where
+   this animation never runs for some reason (an off-screen panel below a
+   short viewport, a renderer that defers work for scrolled-out content),
+   every region still ends up fully visible; worst case it just pops in
+   instead of fading in. */
+#dash.entering .nb,
+#dash.entering .bbar,
+#dash.entering .mgrid > .pnl,
+#dash.entering .sys-strip > .pnl {
+  opacity: 0;
+  transform: translateY(7px);
+  animation: panel-in .4s cubic-bezier(.16,1,.3,1) forwards;
+}
+#dash.entering .nb { animation-delay: 0ms; }
+#dash.entering .mgrid > .pnl:nth-child(1) { animation-delay: 60ms; }   /* MS5611 */
+#dash.entering .mgrid > .pnl:nth-child(2) { animation-delay: 100ms; }  /* Thermal */
+#dash.entering .mgrid > .pnl:nth-child(3) { animation-delay: 80ms; }   /* Mission Terminal */
+#dash.entering .mgrid > .pnl:nth-child(4) { animation-delay: 60ms; }   /* MPU6050 */
+#dash.entering .sys-strip > .pnl:nth-child(1) { animation-delay: 150ms; } /* Battery */
+#dash.entering .sys-strip > .pnl:nth-child(2) { animation-delay: 165ms; } /* Solar */
+#dash.entering .sys-strip > .pnl:nth-child(3) { animation-delay: 180ms; } /* Gyroscope */
+#dash.entering .bbar { animation-delay: 130ms; }
 
 /* ── NAVBAR ── */
 .nb {
@@ -198,10 +248,12 @@ body, .nb, .bbar, .pnl, .pt, .sr, .gb, .icell, .gyro-item, .nb-tab, .conn-status
   border-radius: 3px;
   color:var(--text-dim); font-family:'Barlow Condensed',sans-serif;
   font-weight:600; font-size:10px; letter-spacing:1.5px;
-  padding:6px 14px; cursor:pointer; transition:border-color .15s, color .15s, background .15s;
+  padding:6px 14px; cursor:pointer;
+  transition:border-color .15s, color .15s, background .15s, transform .1s ease-out;
   text-transform:uppercase;
 }
 .nb-tab:hover { border-color:var(--border-hi); color:var(--text); background:var(--wash); }
+.nb-tab:active { transform:scale(.97); }
 .nb-tab:focus-visible { outline:2px solid var(--cyan); outline-offset:1px; }
 .nb-tab.act { border-color:var(--border-accent); color:var(--cyan); background:var(--cyan-bg); }
 
@@ -237,21 +289,28 @@ body, .nb, .bbar, .pnl, .pt, .sr, .gb, .icell, .gyro-item, .nb-tab, .conn-status
    the theme currently ACTIVE, not the one you'd switch to. */
 .theme-toggle {
   display:flex; align-items:center; justify-content:center;
-  width:30px; height:30px; padding:0; flex-shrink:0;
+  width:30px; height:30px; padding:0; flex-shrink:0; position:relative;
   background:transparent; border:1px solid var(--border); border-radius:3px;
   color:var(--text-dim); cursor:pointer;
-  transition:border-color .15s, color .15s, background .15s;
+  transition:border-color .15s, color .15s, background .15s, transform .1s ease-out;
 }
 .theme-toggle:hover { border-color:var(--border-hi); color:var(--text); background:var(--wash); }
+.theme-toggle:active { transform:scale(.94); }
 .theme-toggle:focus-visible { outline:2px solid var(--cyan); outline-offset:1px; }
-.theme-toggle svg { width:15px; height:15px; display:block; }
-.theme-toggle .ti-sun { display:none; }
-.theme-toggle .ti-moon { display:block; }
-:root[data-theme="light"] .theme-toggle .ti-sun { display:block; }
-:root[data-theme="light"] .theme-toggle .ti-moon { display:none; }
+/* Sun/moon cross-fade in place — a small rotate+scale settle rather than an
+   instant display swap, like a mechanical instrument dial changing state. */
+.theme-toggle svg {
+  width:15px; height:15px; display:block;
+  position:absolute; top:50%; left:50%;
+  transition: opacity .25s ease, transform .3s cubic-bezier(.2,.8,.2,1);
+}
+.theme-toggle .ti-sun { opacity:0; transform:translate(-50%,-50%) rotate(60deg) scale(.5); }
+.theme-toggle .ti-moon { opacity:1; transform:translate(-50%,-50%) rotate(0deg) scale(1); }
+:root[data-theme="light"] .theme-toggle .ti-sun { opacity:1; transform:translate(-50%,-50%) rotate(0deg) scale(1); }
+:root[data-theme="light"] .theme-toggle .ti-moon { opacity:0; transform:translate(-50%,-50%) rotate(-60deg) scale(.5); }
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) .theme-toggle .ti-sun { display:block; }
-  :root:not([data-theme="dark"]) .theme-toggle .ti-moon { display:none; }
+  :root:not([data-theme="dark"]) .theme-toggle .ti-sun { opacity:1; transform:translate(-50%,-50%) rotate(0deg) scale(1); }
+  :root:not([data-theme="dark"]) .theme-toggle .ti-moon { opacity:0; transform:translate(-50%,-50%) rotate(-60deg) scale(.5); }
 }
 
 /* Connection status pill — the single, unambiguous source of truth for link state.
@@ -269,7 +328,9 @@ body, .nb, .bbar, .pnl, .pt, .sr, .gb, .icell, .gyro-item, .nb-tab, .conn-status
 .conn-status[data-state="connecting"] .conn-dot { background:var(--amber); box-shadow:0 0 0 3px var(--amber-bg); animation:pulse-soft 1.1s ease infinite; }
 .conn-status[data-state="connecting"] .conn-text { color:var(--amber); }
 .conn-status[data-state="connected"] { border-color:var(--green-border); background:var(--green-bg); }
-.conn-status[data-state="connected"] .conn-dot { background:var(--green); box-shadow:0 0 0 3px var(--green-bg); }
+/* Nominal state gets a slow "life sign" ring rather than a blink — calm and
+   steady, distinct from the faster attention-pulse on connecting/disconnected. */
+.conn-status[data-state="connected"] .conn-dot { background:var(--green); animation:conn-breathe 2.8s ease-in-out infinite; }
 .conn-status[data-state="connected"] .conn-text { color:var(--green); }
 .conn-status[data-state="disconnected"] { border-color:var(--red-border); background:var(--red-bg); }
 .conn-status[data-state="disconnected"] .conn-dot { background:var(--red); box-shadow:0 0 0 3px var(--red-bg); animation:pulse-soft 1.6s ease infinite; }
@@ -383,7 +444,7 @@ body, .nb, .bbar, .pnl, .pt, .sr, .gb, .icell, .gyro-item, .nb-tab, .conn-status
 .gf {
   height:100%; min-width:0;
   background: var(--cyan);
-  transition: width .9s cubic-bezier(.23,1,.32,1);
+  transition: width .9s cubic-bezier(.23,1,.32,1), background-color .16s ease;
 }
 .gf.cy { background: var(--cyan); }
 .gf.yw { background: var(--amber); }
@@ -422,7 +483,10 @@ canvas.sp { display:block; width:100%; height:32px; }
 .tlog::-webkit-scrollbar-track { background:transparent; }
 .tlog::-webkit-scrollbar-thumb { background:var(--border-hi); border-radius:3px; }
 .tlog::-webkit-scrollbar-thumb:hover { background:var(--cyan-dim); }
-.tr2 { display:flex; gap:10px; padding:2.5px 6px; border-radius:2px; border-left:2px solid transparent; }
+.tr2 {
+  display:flex; gap:10px; padding:2.5px 6px; border-radius:2px; border-left:2px solid transparent;
+  animation: log-in .22s ease-out both;
+}
 .tr2:hover { background:var(--wash); }
 .tr2-plain { padding-left:6px; }
 /* Errors and warnings get their own row treatment (background + rail), not just
@@ -456,6 +520,9 @@ canvas.sp { display:block; width:100%; height:32px; }
   font-family:'JetBrains Mono',monospace; font-size:11.5px;
 }
 .term-inputrow:focus-within { border-color:var(--cyan); box-shadow:0 0 0 2px var(--cyan-bg); }
+/* Brief acknowledgement ring the instant a command is submitted — the input
+   itself doesn't move, so typing right after never feels interrupted. */
+.term-inputrow.submit-flash { animation: submit-flash .35s ease-out; }
 .term-prompt { color:var(--cyan); font-weight:700; flex-shrink:0; user-select:none; }
 .term-input {
   flex:1; min-width:0; background:transparent; border:none; outline:none;
@@ -496,11 +563,15 @@ canvas.sp { display:block; width:100%; height:32px; }
   color:var(--text-dim); font-family:'Barlow Condensed',sans-serif;
   font-weight:700; font-size:9.5px; letter-spacing:1.5px;
   padding:4.5px 11px; margin-left:8px; cursor:pointer;
-  transition:border-color .15s, color .15s, background .15s; text-transform:uppercase;
+  transition:border-color .15s, color .15s, background .15s, transform .1s ease-out;
+  text-transform:uppercase;
 }
 .reconnect-btn:hover, .testdata-btn:hover { border-color:var(--border-hi); color:var(--text); background:var(--wash); }
+.reconnect-btn:active, .testdata-btn:active { transform:scale(.97); }
 .reconnect-btn:focus-visible, .testdata-btn:focus-visible { outline:2px solid var(--cyan); outline-offset:1px; }
 .reconnect-btn.trying { color:var(--amber); border-color:var(--amber-border); background:var(--amber-bg); pointer-events:none; }
+.spin-icon { display:inline-block; }
+.reconnect-btn.trying .spin-icon { animation: spin-cw 1s linear infinite; }
 .testdata-btn { color:var(--violet-dim); border-color:var(--violet-border); }
 .testdata-btn:hover { border-color:var(--violet); color:var(--violet); background:var(--violet-bg); }
 .testdata-btn.active { color:var(--violet); border-color:var(--violet); background:var(--violet-bg); }

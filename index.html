@@ -28,7 +28,7 @@
 <div class="vignette"></div>
 
 <!-- ════════ DASHBOARD ════════ -->
-<div id="dash">
+<div id="dash" class="entering">
 
   <!-- NAVBAR -->
   <div class="nb">
@@ -236,7 +236,7 @@
   <!-- BOTTOM BAR -->
   <div class="bbar">
     <div class="rawstr" id="rawstr">RAW › <span>NO SIGNAL</span></div>
-    <div class="pstat"><span class="pdot"></span> PARSER ACTIVE — 1400ms INTERVAL <span id="data-mode" class="data-mode none">NO SOURCE</span><button class="reconnect-btn" id="reconnect-btn" onclick="tryReconnect()">⟳ RECONNECT</button><button class="testdata-btn" id="testdata-btn" onclick="toggleTestData()">▶ TEST DATA</button></div>
+    <div class="pstat"><span class="pdot"></span> PARSER ACTIVE — 1400ms INTERVAL <span id="data-mode" class="data-mode none">NO SOURCE</span><button class="reconnect-btn" id="reconnect-btn" onclick="tryReconnect()"><span class="spin-icon">⟳</span> RECONNECT</button><button class="testdata-btn" id="testdata-btn" onclick="toggleTestData()">▶ TEST DATA</button></div>
     <div id="dclk" class="dclk">--:--:-- UTC</div>
   </div>
 

@@ -112,9 +112,20 @@
     }
   }
 
+  // A quick acknowledgement ring around the input bar the instant a command is
+  // actually submitted — restarts even if the previous flash hasn't finished.
+  function flashSubmitRow() {
+    const row = inputEl && inputEl.closest('.term-inputrow');
+    if (!row) return;
+    row.classList.remove('submit-flash');
+    void row.offsetWidth; // force reflow so the animation restarts even if it's already mid-play
+    row.classList.add('submit-flash');
+  }
+
   async function handleSubmit(raw) {
     const trimmed = raw.trim();
     if (!trimmed) return;
+    flashSubmitRow();
 
     // A confirmation is pending — check if this line confirms it.
     if (pending) {

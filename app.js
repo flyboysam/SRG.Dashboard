@@ -67,18 +67,26 @@ function playConnectionFailedSound(){
     warm:i>=120&&i<180
   }));
   let t=0;
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   (function draw(){
-    ctx.clearRect(0,0,c.width,c.height);
-    stars.forEach(s=>{
-      const a=s.a*(.3+.7*Math.sin(t*s.f));
-      ctx.beginPath();
-      ctx.arc(s.x*c.width,s.y*c.height,s.r,0,Math.PI*2);
-      if(s.warm) ctx.fillStyle=`rgba(255,193,7,${a*.35})`;
-      else if(s.cyan) ctx.fillStyle=`rgba(79,195,247,${a*.45})`;
-      else ctx.fillStyle=`rgba(79,195,247,${a*.25})`;
-      ctx.fill();
-    });
-    t+=.01; requestAnimationFrame(draw);
+    // Invisible in light mode (a night-sky motif has no place in daylight —
+    // see styles.css) and unnecessary under reduced-motion, so skip the
+    // per-star redraw entirely rather than paying for pixels no one sees.
+    const skip = reduceMotion || document.documentElement.getAttribute('data-theme')==='light';
+    if(!skip){
+      ctx.clearRect(0,0,c.width,c.height);
+      stars.forEach(s=>{
+        const a=s.a*(.3+.7*Math.sin(t*s.f));
+        ctx.beginPath();
+        ctx.arc(s.x*c.width,s.y*c.height,s.r,0,Math.PI*2);
+        if(s.warm) ctx.fillStyle=`rgba(255,193,7,${a*.35})`;
+        else if(s.cyan) ctx.fillStyle=`rgba(79,195,247,${a*.45})`;
+        else ctx.fillStyle=`rgba(79,195,247,${a*.25})`;
+        ctx.fill();
+      });
+      t+=.01;
+    }
+    requestAnimationFrame(draw);
   })();
 })();
 
@@ -134,6 +142,14 @@ function setTheme(theme){
     else if(mq.addListener) mq.addListener(onSystemChange);
   }
 })();
+
+// ═══════════════ ENTRANCE SAFETY NET ═══════════════
+// #dash loads with class="entering" (index.html), which is the only thing
+// that makes any region invisible pre-animation (styles.css) — never a bare
+// rule. This plain timer removes it once the staggered sequence has had time
+// to finish, so every panel is guaranteed visible on a fixed schedule
+// regardless of whether the CSS animation itself ran to completion.
+setTimeout(()=>{ const d=document.getElementById('dash'); if(d) d.classList.remove('entering'); }, 700);
 
 // ═══════════════ CLOCK ═══════════════
 function utcStr(){return new Date().toUTCString().split(' ')[4]+' UTC';}
@@ -217,7 +233,7 @@ async function startDash(){
 async function tryReconnect(){
   if(dataMode==='test') setTestDataMode(false);
   const btn=document.getElementById('reconnect-btn');
-  if(btn){btn.classList.add('trying');btn.textContent='⟳ TRYING...';}
+  if(btn){btn.classList.add('trying');btn.innerHTML='<span class="spin-icon">⟳</span> TRYING...';}
   setConnState('connecting');
 
   if(ADAFRUIT_IO_KEY){
@@ -230,7 +246,7 @@ async function tryReconnect(){
         updateModeIndicator(false);
         tlog('ADAFRUIT IO CONNECTED ✓','tok');
         playConnectionSound(); connectionSoundPlayed=true;
-        if(btn){btn.classList.remove('trying');btn.textContent='⟳ RECONNECT';}
+        if(btn){btn.classList.remove('trying');btn.innerHTML='<span class="spin-icon">⟳</span> RECONNECT';}
         return;
       }
     } catch(err) {
@@ -241,7 +257,7 @@ async function tryReconnect(){
   tlog('ADAFRUIT IO UNAVAILABLE — AWAITING RECONNECT','terr');
   adafruitOfflineNotified=true;
   updateModeIndicator(true);
-  if(btn){btn.classList.remove('trying');btn.textContent='⟳ RECONNECT';}
+  if(btn){btn.classList.remove('trying');btn.innerHTML='<span class="spin-icon">⟳</span> RECONNECT';}
 }
 
 // ═══════════════ TEST DATA MODE ═══════════════
@@ -543,19 +559,43 @@ async function tickTel(){
   telemetryState.frames=frames; telemetryState.pkts=pkts; telemetryState.sesStart=sesStart;
 }
 
+// A telemetry value actually changed — a brief neutral highlight (.val-flash,
+// styles.css) says "new data landed" without touching the value's own status
+// color. Never fires when the text is unchanged, so a dead link showing the
+// same "0.00"/"NO DATA" tick after tick stays perfectly still. The forced
+// reflow (offsetWidth) is what lets the animation restart even if a previous
+// flash on the same element hasn't finished — it's a single cheap read on a
+// small element, at most a couple dozen times per 1.4s telemetry tick.
+function flashEl(e){
+  if(!e) return;
+  e.classList.remove('val-flash');
+  void e.offsetWidth;
+  e.classList.add('val-flash');
+}
 function imuCell(id,val,unit,isGn){
   const e=document.getElementById(id);if(!e)return;
-  e.innerHTML=`${typeof val==='number'&&!isNaN(val)?val.toFixed(2):'0.00'}<span class="icu"> ${unit}</span>`;
+  const html=`${typeof val==='number'&&!isNaN(val)?val.toFixed(2):'0.00'}<span class="icu"> ${unit}</span>`;
+  const changed = e.innerHTML!==html;
+  e.innerHTML=html;
   e.className='ic-v'+(isGn?' gn':'');
+  if(changed) flashEl(e);
 }
-function set(id,v){const e=document.getElementById(id);if(e)e.textContent=v;}
+function set(id,v){
+  const e=document.getElementById(id);if(!e)return;
+  if(e.textContent===v) return;
+  e.textContent=v;
+  flashEl(e);
+}
 function setcl(id,c){const e=document.getElementById(id);if(e)e.className=c;}
 function gb(id,p){const e=document.getElementById(id);if(e)e.style.width=Math.min(100,Math.max(0,p))+'%';}
 function statEl(id,ok,okTxt,badTxt){
   const e=document.getElementById(id);if(!e)return;
   const noData=ok==='na';
-  e.textContent=noData?'NO DATA':(ok?okTxt:badTxt);
+  const text=noData?'NO DATA':(ok?okTxt:badTxt);
+  const changed = e.textContent!==text;
+  e.textContent=text;
   e.className='sv '+(noData?'mt':(ok?'gn':'rd'));
+  if(changed) flashEl(e);
 }
 function push(a,v,mx){a.push(v);if(a.length>mx)a.shift();}
 function fmtEta(mins){if(mins<1)return '<1 min';if(mins<60)return `${Math.round(mins)} min`;const h=Math.floor(mins/60),m=Math.round(mins%60);return `${h}h ${m}m`;}
